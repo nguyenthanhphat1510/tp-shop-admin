@@ -1,79 +1,129 @@
 "use client";
-import React, { useState } from "react";
-import { Edit, Trash2, Plus, Search, Filter } from "lucide-react";
-
-// Mock data sản phẩm
-const products = [
-    {
-        id: 1,
-        image: "https://via.placeholder.com/60x60/3B82F6/FFFFFF?text=AT",
-        name: "Áo Thun Basic Premium",
-        category: "Áo",
-        subCategory: "Áo Thun",
-        price: "250.000₫",
-        stock: 120,
-        active: true,
-    },
-    {
-        id: 2,
-        image: "https://via.placeholder.com/60x60/10B981/FFFFFF?text=QJ",
-        name: "Quần Jean Slim Fit",
-        category: "Quần",
-        subCategory: "Jean",
-        price: "450.000₫",
-        stock: 60,
-        active: false,
-    },
-    {
-        id: 3,
-        image: "https://via.placeholder.com/60x60/F59E0B/FFFFFF?text=GS",
-        name: "Giày Sneaker Sport",
-        category: "Giày",
-        subCategory: "Thể thao",
-        price: "900.000₫",
-        stock: 30,
-        active: true,
-    },
-    {
-        id: 4,
-        image: "https://via.placeholder.com/60x60/EF4444/FFFFFF?text=AK",
-        name: "Áo Khoác Hoodie",
-        category: "Áo",
-        subCategory: "Áo Khoác",
-        price: "380.000₫",
-        stock: 45,
-        active: true,
-    },
-    {
-        id: 5,
-        image: "https://via.placeholder.com/60x60/8B5CF6/FFFFFF?text=VS",
-        name: "Váy Suông Công Sở",
-        category: "Váy",
-        subCategory: "Công Sở",
-        price: "320.000₫",
-        stock: 25,
-        active: false,
-    },
-];
+import React, { useState, useEffect } from "react";
+import { Edit, Trash2, Plus, Search, Filter, X } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 export default function ProductsPage() {
+    const router = useRouter();
     const [search, setSearch] = useState("");
     const [viewMode, setViewMode] = useState("table"); 
-    const [productList, setProductList] = useState(products);
+    const [productList, setProductList] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     
-    const filtered = productList.filter(
-        (p) =>
-            p.name.toLowerCase().includes(search.toLowerCase()) ||
-            p.category.toLowerCase().includes(search.toLowerCase()) ||
-            p.subCategory.toLowerCase().includes(search.toLowerCase())
-    );
+    // Filter states
+    const [showFilters, setShowFilters] = useState(false);
+    const [filters, setFilters] = useState({
+        category: "",
+        status: "", // "active", "inactive", ""
+        priceRange: "", // "low", "medium", "high", ""
+        stockLevel: "" // "in-stock", "low-stock", "out-of-stock", ""
+    });
+    
+    // Fetch products từ API
+    useEffect(() => {
+        const fetchProducts = async () => {
+            try {
+                setLoading(true);
+                const response = await fetch('http://localhost:3000/api/products');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                // Transform data để match với frontend expectations
+                const transformedData = data.map(product => ({
+                    _id: product._id,
+                    name: product.name,
+                    description: product.description,
+                    price: parseInt(product.price), // Convert string to number
+                    images: product.imageUrls, // Map imageUrls to images
+                    category: "Điện thoại", // TODO: Fetch from categoryId
+                    subCategory: product.name.includes("iPhone") ? "iPhone" : "Android", // Tạm thời logic đơn giản
+                    stock: parseInt(product.stock), // Convert string to number
+                    active: product.isActive === "true", // Convert string to boolean
+                    createdAt: product.createdAt,
+                    updatedAt: product.updatedAt
+                }));
+                
+                setProductList(transformedData);
+                setError(null);
+            } catch (err) {
+                console.error('Error fetching products:', err);
+                setError('Không thể tải danh sách sản phẩm');
+            } finally {
+                setLoading(false);
+            }
+        };
 
-    const toggleActive = (productId) => {
-        setProductList(prev => prev.map(product => 
-            product.id === productId 
-                ? { ...product, active: !product.active }
-                : product
-        ));
+        fetchProducts();
+    }, []);
+    
+    // Apply filters
+    const filtered = productList.filter((product) => {
+        // Search filter
+        const matchesSearch = !search || 
+            product.name?.toLowerCase().includes(search.toLowerCase()) ||
+            product.category?.toLowerCase().includes(search.toLowerCase()) ||
+            product.subCategory?.toLowerCase().includes(search.toLowerCase());
+        
+        // Category filter
+        const matchesCategory = !filters.category || product.category === filters.category;
+        
+        // Status filter
+        const matchesStatus = !filters.status || 
+            (filters.status === "active" && product.active) ||
+            (filters.status === "inactive" && !product.active);
+        
+        // Price range filter
+        const matchesPriceRange = !filters.priceRange ||
+            (filters.priceRange === "low" && product.price < 5000000) ||
+            (filters.priceRange === "medium" && product.price >= 5000000 && product.price < 15000000) ||
+            (filters.priceRange === "high" && product.price >= 15000000);
+        
+        // Stock level filter
+        const matchesStockLevel = !filters.stockLevel ||
+            (filters.stockLevel === "in-stock" && product.stock > 20) ||
+            (filters.stockLevel === "low-stock" && product.stock > 0 && product.stock <= 20) ||
+            (filters.stockLevel === "out-of-stock" && product.stock === 0);
+        
+        return matchesSearch && matchesCategory && matchesStatus && matchesPriceRange && matchesStockLevel;
+    });
+
+    // Clear all filters
+    const clearFilters = () => {
+        setFilters({
+            category: "",
+            status: "",
+            priceRange: "",
+            stockLevel: ""
+        });
+        setSearch("");
+    };
+
+    // Check if any filters are active
+    const hasActiveFilters = search || Object.values(filters).some(filter => filter !== "");
+
+    const toggleActive = async (productId) => {
+        try {
+            // TODO: Call API để update trạng thái sản phẩm
+            // const response = await fetch(`http://localhost:3000/api/products/${productId}`, {
+            //     method: 'PATCH',
+            //     headers: { 'Content-Type': 'application/json' },
+            //     body: JSON.stringify({ isActive: !currentStatus })
+            // });
+            
+            // Temporary: Update UI optimistically
+            setProductList(prev => prev.map(product => 
+                product._id === productId 
+                    ? { ...product, active: !product.active }
+                    : product
+            ));
+        } catch (error) {
+            console.error('Error updating product status:', error);
+        }
     };
 
     const ToggleSwitch = ({ isActive, onToggle, disabled = false }) => (
@@ -124,21 +174,21 @@ export default function ProductsPage() {
     };
 
     const ProductCard = ({ product }) => (
-        <div className={`bg-white rounded-lg shadow-sm border hover:shadow-md transition-shadow duration-200 overflow-hidden ${!product.active ? 'opacity-75' : ''}`}>
+        <div className={`bg-white rounded-lg shadow-sm border-2 border-gray-300 hover:shadow-md hover:border-gray-400 transition-all duration-200 overflow-hidden ${!product.active ? 'opacity-75' : ''}`}>
             <div className="p-4">
                 <div className="flex items-start gap-3 mb-3">
                     <img 
-                        src={product.image} 
+                        src={product.images?.[0] || "https://via.placeholder.com/60"} 
                         alt={product.name} 
-                        className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
+                        className="w-16 h-16 rounded-lg object-cover flex-shrink-0 border-2 border-gray-200"
                     />
                     <div className="flex-1 min-w-0">
                         <h3 className="font-medium text-gray-900 truncate mb-1">{product.name}</h3>
                         <div className="flex flex-wrap gap-1 text-xs mb-2">
-                            <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full">
+                            <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full border border-blue-200">
                                 {product.category}
                             </span>
-                            <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-full">
+                            <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-full border border-gray-300">
                                 {product.subCategory}
                             </span>
                         </div>
@@ -146,7 +196,7 @@ export default function ProductsPage() {
                             <span className="text-xs text-gray-500">Trạng thái:</span>
                             <ToggleSwitch 
                                 isActive={product.active}
-                                onToggle={() => toggleActive(product.id)}
+                                onToggle={() => toggleActive(product._id)}
                             />
                             <span className={`text-xs font-medium ${product.active ? 'text-green-600' : 'text-gray-500'}`}>
                                 {product.active ? 'Hoạt động' : 'Tạm dừng'}
@@ -155,8 +205,10 @@ export default function ProductsPage() {
                     </div>
                 </div>
                 
-                <div className="flex items-center justify-between mb-3">
-                    <div className="text-lg font-semibold text-blue-600">{product.price}</div>
+                <div className="flex items-center justify-between mb-3 pb-3 border-b border-gray-200">
+                    <div className="text-lg font-semibold text-blue-600">
+                        {product.price?.toLocaleString()}₫
+                    </div>
                     <div className="text-sm text-gray-500">Kho: {product.stock}</div>
                 </div>
                 
@@ -164,7 +216,7 @@ export default function ProductsPage() {
                     <ActionButton 
                         variant="secondary" 
                         size="sm"
-                        onClick={() => console.log('Edit:', product.id)}
+                        onClick={() => handleEdit(product._id)}
                     >
                         <Edit className="w-4 h-4" />
                         Sửa
@@ -172,7 +224,7 @@ export default function ProductsPage() {
                     <ActionButton 
                         variant="danger" 
                         size="sm"
-                        onClick={() => console.log('Delete:', product.id)}
+                        onClick={() => handleDelete(product._id)}
                     >
                         <Trash2 className="w-4 h-4" />
                         Xóa
@@ -181,6 +233,60 @@ export default function ProductsPage() {
             </div>
         </div>
     );
+
+    // Loading state
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    <p className="text-gray-600">Đang tải sản phẩm...</p>
+                </div>
+            </div>
+        );
+    }
+
+    // Error state
+    if (error) {
+        return (
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                <div className="text-center">
+                    <div className="text-red-500 mb-4">
+                        <Search className="w-12 h-12 mx-auto mb-2" />
+                    </div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">Lỗi tải dữ liệu</h3>
+                    <p className="text-gray-500 mb-4">{error}</p>
+                    <button 
+                        onClick={() => window.location.reload()}
+                        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                    >
+                        Thử lại
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    const handleEdit = (productId) => {
+        router.push(`/products/${productId}/edit`);
+    };
+
+    const handleDelete = async (productId) => {
+        if (confirm('Bạn có chắc chắn muốn xóa sản phẩm này?')) {
+            try {
+                // TODO: Call API để xóa sản phẩm
+                // const response = await fetch(`http://localhost:3000/api/products/${productId}`, {
+                //     method: 'DELETE'
+                // });
+                
+                // Temporary: Remove from UI
+                setProductList(prev => prev.filter(product => product._id !== productId));
+                console.log('Deleted product:', productId);
+            } catch (error) {
+                console.error('Error deleting product:', error);
+            }
+        }
+    };
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -193,10 +299,13 @@ export default function ProductsPage() {
                                 Quản Lý Sản Phẩm
                             </h1>
                             <p className="text-gray-600">
-                                Quản lý danh sách sản phẩm và kho hàng của bạn
+                                Quản lý danh sách sản phẩm và kho hàng của bạn ({productList.length} sản phẩm)
                             </p>
                         </div>
-                        <button className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-colors shadow-sm">
+                        <button 
+                            onClick={() => router.push('/products/add')}
+                            className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-colors shadow-sm"
+                        >
                             <Plus className="w-5 h-5" />
                             Thêm sản phẩm
                         </button>
@@ -206,7 +315,7 @@ export default function ProductsPage() {
                     <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center">
                         <div className="relative flex-1 max-w-md">
                             <input
-                                className="w-full border border-gray-300 rounded-lg pl-10 pr-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                                className="w-full border-2 border-gray-400 rounded-lg pl-10 pr-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
                                 placeholder="Tìm kiếm sản phẩm, danh mục..."
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
@@ -215,18 +324,40 @@ export default function ProductsPage() {
                         </div>
                         
                         <div className="flex gap-2">
-                            <button className="flex items-center gap-2 px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                            <button 
+                                onClick={() => setShowFilters(!showFilters)}
+                                className={`flex items-center gap-2 px-4 py-3 border-2 rounded-lg transition-colors ${
+                                    showFilters || hasActiveFilters
+                                        ? "border-blue-500 bg-blue-50 text-blue-700" 
+                                        : "border-gray-400 hover:bg-gray-50 hover:border-gray-500"
+                                }`}
+                            >
                                 <Filter className="w-4 h-4" />
                                 <span className="hidden sm:inline">Lọc</span>
+                                {hasActiveFilters && (
+                                    <span className="bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                                        {Object.values(filters).filter(f => f !== "").length + (search ? 1 : 0)}
+                                    </span>
+                                )}
                             </button>
                             
+                            {hasActiveFilters && (
+                                <button
+                                    onClick={clearFilters}
+                                    className="flex items-center gap-2 px-4 py-3 border-2 border-red-400 text-red-600 rounded-lg hover:bg-red-50 hover:border-red-500 transition-colors"
+                                >
+                                    <X className="w-4 h-4" />
+                                    <span className="hidden sm:inline">Xóa lọc</span>
+                                </button>
+                            )}
+                            
                             {/* View Mode Toggle */}
-                            <div className="hidden md:flex bg-gray-100 rounded-lg p-1">
+                            <div className="hidden md:flex bg-gray-100 rounded-lg p-1 border-2 border-gray-300">
                                 <button
                                     onClick={() => setViewMode("table")}
                                     className={`px-3 py-2 text-sm rounded-md transition-colors ${
                                         viewMode === "table" 
-                                            ? "bg-white text-gray-900 shadow-sm" 
+                                            ? "bg-white text-gray-900 shadow-sm border border-gray-300" 
                                             : "text-gray-600 hover:text-gray-900"
                                     }`}
                                 >
@@ -236,7 +367,7 @@ export default function ProductsPage() {
                                     onClick={() => setViewMode("card")}
                                     className={`px-3 py-2 text-sm rounded-md transition-colors ${
                                         viewMode === "card" 
-                                            ? "bg-white text-gray-900 shadow-sm" 
+                                            ? "bg-white text-gray-900 shadow-sm border border-gray-300" 
                                             : "text-gray-600 hover:text-gray-900"
                                     }`}
                                 >
@@ -245,11 +376,77 @@ export default function ProductsPage() {
                             </div>
                         </div>
                     </div>
+
+                    {/* Filter Panel */}
+                    {showFilters && (
+                        <div className="mt-4 p-4 bg-white rounded-lg border-2 border-gray-300 shadow-sm">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                {/* Category Filter */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Danh mục</label>
+                                    <select
+                                        value={filters.category}
+                                        onChange={(e) => setFilters(prev => ({ ...prev, category: e.target.value }))}
+                                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    >
+                                        <option value="">Tất cả danh mục</option>
+                                        <option value="Điện thoại">Điện thoại</option>
+                                        <option value="Laptop">Laptop</option>
+                                        <option value="Tablet">Tablet</option>
+                                    </select>
+                                </div>
+
+                                {/* Status Filter */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Trạng thái</label>
+                                    <select
+                                        value={filters.status}
+                                        onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+                                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    >
+                                        <option value="">Tất cả trạng thái</option>
+                                        <option value="active">Hoạt động</option>
+                                        <option value="inactive">Tạm dừng</option>
+                                    </select>
+                                </div>
+
+                                {/* Price Range Filter */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Khoảng giá</label>
+                                    <select
+                                        value={filters.priceRange}
+                                        onChange={(e) => setFilters(prev => ({ ...prev, priceRange: e.target.value }))}
+                                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    >
+                                        <option value="">Tất cả mức giá</option>
+                                        <option value="low">Dưới 5 triệu</option>
+                                        <option value="medium">5 - 15 triệu</option>
+                                        <option value="high">Trên 15 triệu</option>
+                                    </select>
+                                </div>
+
+                                {/* Stock Level Filter */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Tồn kho</label>
+                                    <select
+                                        value={filters.stockLevel}
+                                        onChange={(e) => setFilters(prev => ({ ...prev, stockLevel: e.target.value }))}
+                                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    >
+                                        <option value="">Tất cả mức tồn</option>
+                                        <option value="in-stock">Còn hàng (trên 20)</option>
+                                        <option value="low-stock">Sắp hết (1-20)</option>
+                                        <option value="out-of-stock">Hết hàng (0)</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Content */}
                 {filtered.length === 0 ? (
-                    <div className="bg-white rounded-lg shadow-sm border p-12 text-center">
+                    <div className="bg-white rounded-lg shadow-sm border-2 border-gray-300 p-12 text-center">
                         <div className="text-gray-400 mb-4">
                             <Search className="w-12 h-12 mx-auto mb-4" />
                         </div>
@@ -266,7 +463,7 @@ export default function ProductsPage() {
                         <div className="md:hidden">
                             <div className="grid gap-4">
                                 {filtered.map((product) => (
-                                    <ProductCard key={product.id} product={product} />
+                                    <ProductCard key={product._id} product={product} />
                                 ))}
                             </div>
                         </div>
@@ -276,32 +473,32 @@ export default function ProductsPage() {
                             {viewMode === "card" ? (
                                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
                                     {filtered.map((product) => (
-                                        <ProductCard key={product.id} product={product} />
+                                        <ProductCard key={product._id} product={product} />
                                     ))}
                                 </div>
                             ) : (
-                                <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
+                                <div className="bg-white rounded-lg shadow-sm border-2 border-gray-300 overflow-hidden">
                                     <div className="overflow-x-auto">
                                         <table className="w-full">
-                                            <thead className="bg-gray-50 border-b">
+                                            <thead className="bg-gray-50 border-b-2 border-gray-300">
                                                 <tr>
-                                                    <th className="text-left py-4 px-6 font-medium text-gray-900">Sản phẩm</th>
-                                                    <th className="text-left py-4 px-6 font-medium text-gray-900">Danh mục</th>
-                                                    <th className="text-left py-4 px-6 font-medium text-gray-900">Giá</th>
-                                                    <th className="text-left py-4 px-6 font-medium text-gray-900">Tồn kho</th>
-                                                    <th className="text-left py-4 px-6 font-medium text-gray-900">Trạng thái</th>
+                                                    <th className="text-left py-4 px-6 font-medium text-gray-900 border-r border-gray-200">Sản phẩm</th>
+                                                    <th className="text-left py-4 px-6 font-medium text-gray-900 border-r border-gray-200">Danh mục</th>
+                                                    <th className="text-left py-4 px-6 font-medium text-gray-900 border-r border-gray-200">Giá</th>
+                                                    <th className="text-left py-4 px-6 font-medium text-gray-900 border-r border-gray-200">Tồn kho</th>
+                                                    <th className="text-left py-4 px-6 font-medium text-gray-900 border-r border-gray-200">Trạng thái</th>
                                                     <th className="text-left py-4 px-6 font-medium text-gray-900">Thao tác</th>
                                                 </tr>
                                             </thead>
-                                            <tbody className="divide-y divide-gray-200">
+                                            <tbody className="divide-y-2 divide-gray-200">
                                                 {filtered.map((product) => (
-                                                    <tr key={product.id} className={`hover:bg-gray-50 transition-colors ${!product.active ? 'opacity-60' : ''}`}>
-                                                        <td className="py-4 px-6">
+                                                    <tr key={product._id} className={`hover:bg-gray-50 transition-colors ${!product.active ? 'opacity-60' : ''}`}>
+                                                        <td className="py-4 px-6 border-r border-gray-200">
                                                             <div className="flex items-center gap-3">
                                                                 <img 
-                                                                    src={product.image} 
+                                                                    src={product.images?.[0] || "https://via.placeholder.com/60"} 
                                                                     alt={product.name} 
-                                                                    className="w-12 h-12 rounded-lg object-cover"
+                                                                    className="w-12 h-12 rounded-lg object-cover border border-gray-200"
                                                                 />
                                                                 <div>
                                                                     <div className="font-medium text-gray-900">{product.name}</div>
@@ -309,28 +506,30 @@ export default function ProductsPage() {
                                                                 </div>
                                                             </div>
                                                         </td>
-                                                        <td className="py-4 px-6">
-                                                            <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
+                                                        <td className="py-4 px-6 border-r border-gray-200">
+                                                            <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium border border-blue-200">
                                                                 {product.category}
                                                             </span>
                                                         </td>
-                                                        <td className="py-4 px-6 font-semibold text-gray-900">{product.price}</td>
-                                                        <td className="py-4 px-6">
-                                                            <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                                                        <td className="py-4 px-6 font-semibold text-gray-900 border-r border-gray-200">
+                                                            {product.price?.toLocaleString()}₫
+                                                        </td>
+                                                        <td className="py-4 px-6 border-r border-gray-200">
+                                                            <span className={`px-3 py-1 rounded-full text-sm font-medium border ${
                                                                 product.stock > 50 
-                                                                    ? "bg-green-100 text-green-700" 
+                                                                    ? "bg-green-100 text-green-700 border-green-200" 
                                                                     : product.stock > 20 
-                                                                    ? "bg-yellow-100 text-yellow-700" 
-                                                                    : "bg-red-100 text-red-700"
+                                                                    ? "bg-yellow-100 text-yellow-700 border-yellow-200" 
+                                                                    : "bg-red-100 text-red-700 border-red-200"
                                                             }`}>
                                                                 {product.stock}
                                                             </span>
                                                         </td>
-                                                        <td className="py-4 px-6">
+                                                        <td className="py-4 px-6 border-r border-gray-200">
                                                             <div className="flex items-center gap-3">
                                                                 <ToggleSwitch 
                                                                     isActive={product.active}
-                                                                    onToggle={() => toggleActive(product.id)}
+                                                                    onToggle={() => toggleActive(product._id)}
                                                                 />
                                                                 <span className={`text-sm font-medium ${product.active ? 'text-green-600' : 'text-gray-500'}`}>
                                                                     {product.active ? 'Hoạt động' : 'Tạm dừng'}
@@ -342,7 +541,7 @@ export default function ProductsPage() {
                                                                 <ActionButton 
                                                                     variant="secondary" 
                                                                     size="sm"
-                                                                    onClick={() => console.log('Edit:', product.id)}
+                                                                    onClick={() => handleEdit(product._id)}
                                                                 >
                                                                     <Edit className="w-4 h-4" />
                                                                     Sửa
@@ -350,7 +549,7 @@ export default function ProductsPage() {
                                                                 <ActionButton 
                                                                     variant="danger" 
                                                                     size="sm"
-                                                                    onClick={() => console.log('Delete:', product.id)}
+                                                                    onClick={() => handleDelete(product._id)}
                                                                 >
                                                                     <Trash2 className="w-4 h-4" />
                                                                     Xóa
@@ -371,8 +570,9 @@ export default function ProductsPage() {
                 {/* Results Summary */}
                 {filtered.length > 0 && (
                     <div className="mt-6 text-center text-sm text-gray-500">
-                        Hiển thị {filtered.length} sản phẩm
+                        Hiển thị {filtered.length} / {productList.length} sản phẩm
                         {search && ` cho "${search}"`}
+                        {hasActiveFilters && " (đã lọc)"}
                     </div>
                 )}
             </div>
