@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { Edit, Trash2, Plus, Search, Filter, X } from "lucide-react";
 import { useRouter } from "next/navigation";
+import toast from 'react-hot-toast'; // ✅ Add toast import
 
 export default function ProductsPage() {
     const router = useRouter();
@@ -11,14 +12,45 @@ export default function ProductsPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     
+    // ✅ Add categories and subcategories state
+    const [categories, setCategories] = useState([]);
+    const [subcategories, setSubcategories] = useState([]);
+    
     // Filter states
     const [showFilters, setShowFilters] = useState(false);
     const [filters, setFilters] = useState({
         category: "",
+        subcategory: "", // ✅ Add subcategory filter
         status: "", // "active", "inactive", ""
         priceRange: "", // "low", "medium", "high", ""
         stockLevel: "" // "in-stock", "low-stock", "out-of-stock", ""
     });
+    
+    // ✅ Fetch categories and subcategories
+    useEffect(() => {
+        const fetchCategoriesAndSubcategories = async () => {
+            try {
+                const [categoriesRes, subcategoriesRes] = await Promise.all([
+                    fetch('http://localhost:3000/api/categories'),
+                    fetch('http://localhost:3000/api/subcategories')
+                ]);
+                
+                if (categoriesRes.ok) {
+                    const categoriesData = await categoriesRes.json();
+                    setCategories(categoriesData);
+                }
+                
+                if (subcategoriesRes.ok) {
+                    const subcategoriesData = await subcategoriesRes.json();
+                    setSubcategories(subcategoriesData);
+                }
+            } catch (error) {
+                console.error('Error fetching categories/subcategories:', error);
+            }
+        };
+        
+        fetchCategoriesAndSubcategories();
+    }, []);
     
     // Fetch products từ API
     useEffect(() => {
@@ -33,20 +65,28 @@ export default function ProductsPage() {
                 
                 const data = await response.json();
                 
-                // Transform data để match với frontend expectations
-                const transformedData = data.map(product => ({
-                    _id: product._id,
-                    name: product.name,
-                    description: product.description,
-                    price: parseInt(product.price), // Convert string to number
-                    images: product.imageUrls, // Map imageUrls to images
-                    category: "Điện thoại", // TODO: Fetch from categoryId
-                    subCategory: product.name.includes("iPhone") ? "iPhone" : "Android", // Tạm thời logic đơn giản
-                    stock: parseInt(product.stock), // Convert string to number
-                    active: product.isActive === "true", // Convert string to boolean
-                    createdAt: product.createdAt,
-                    updatedAt: product.updatedAt
-                }));
+                // ✅ Enhanced data transformation with proper category mapping
+                const transformedData = data.map(product => {
+                    // Find category name
+                    const category = categories.find(cat => cat._id === product.categoryId);
+                    const subcategory = subcategories.find(sub => sub._id === product.subcategoryId);
+                    
+                    return {
+                        _id: product._id,
+                        name: product.name,
+                        description: product.description,
+                        price: parseInt(product.price),
+                        images: product.imageUrls || [],
+                        category: category?.name || "Chưa phân loại",
+                        categoryId: product.categoryId,
+                        subCategory: subcategory?.name || "Chưa có",
+                        subcategoryId: product.subcategoryId,
+                        stock: parseInt(product.stock),
+                        active: product.isActive === "true" || product.isActive === true,
+                        createdAt: product.createdAt,
+                        updatedAt: product.updatedAt
+                    };
+                });
                 
                 setProductList(transformedData);
                 setError(null);
@@ -58,10 +98,13 @@ export default function ProductsPage() {
             }
         };
 
-        fetchProducts();
-    }, []);
+        // Only fetch products after categories are loaded
+        if (categories.length > 0 && subcategories.length > 0) {
+            fetchProducts();
+        }
+    }, [categories, subcategories]);
     
-    // Apply filters
+    // ✅ Enhanced filters with subcategory
     const filtered = productList.filter((product) => {
         // Search filter
         const matchesSearch = !search || 
@@ -70,7 +113,10 @@ export default function ProductsPage() {
             product.subCategory?.toLowerCase().includes(search.toLowerCase());
         
         // Category filter
-        const matchesCategory = !filters.category || product.category === filters.category;
+        const matchesCategory = !filters.category || product.categoryId === filters.category;
+        
+        // ✅ Subcategory filter
+        const matchesSubcategory = !filters.subcategory || product.subcategoryId === filters.subcategory;
         
         // Status filter
         const matchesStatus = !filters.status || 
@@ -89,13 +135,19 @@ export default function ProductsPage() {
             (filters.stockLevel === "low-stock" && product.stock > 0 && product.stock <= 20) ||
             (filters.stockLevel === "out-of-stock" && product.stock === 0);
         
-        return matchesSearch && matchesCategory && matchesStatus && matchesPriceRange && matchesStockLevel;
+        return matchesSearch && matchesCategory && matchesSubcategory && matchesStatus && matchesPriceRange && matchesStockLevel;
     });
+
+    // ✅ Get filtered subcategories based on selected category
+    const filteredSubcategories = filters.category 
+        ? subcategories.filter(sub => sub.categoryId === filters.category)
+        : subcategories;
 
     // Clear all filters
     const clearFilters = () => {
         setFilters({
             category: "",
+            subcategory: "",
             status: "",
             priceRange: "",
             stockLevel: ""
@@ -106,23 +158,47 @@ export default function ProductsPage() {
     // Check if any filters are active
     const hasActiveFilters = search || Object.values(filters).some(filter => filter !== "");
 
+    // ✅ Enhanced toggle with toast notification
     const toggleActive = async (productId) => {
         try {
+            const currentProduct = productList.find(p => p._id === productId);
+            const newStatus = !currentProduct.active;
+            
             // TODO: Call API để update trạng thái sản phẩm
             // const response = await fetch(`http://localhost:3000/api/products/${productId}`, {
             //     method: 'PATCH',
             //     headers: { 'Content-Type': 'application/json' },
-            //     body: JSON.stringify({ isActive: !currentStatus })
+            //     body: JSON.stringify({ isActive: newStatus })
             // });
             
-            // Temporary: Update UI optimistically
+            // Update UI optimistically
             setProductList(prev => prev.map(product => 
                 product._id === productId 
-                    ? { ...product, active: !product.active }
+                    ? { ...product, active: newStatus }
                     : product
             ));
+            
+            // ✅ Show toast notification when deactivating
+            if (!newStatus) {
+                toast('Sản phẩm đã được tạm dừng', {
+                    icon: '⚠️',
+                    style: {
+                        borderRadius: '10px',
+                        background: '#F59E0B',
+                        color: '#fff',
+                        fontWeight: 'bold',
+                    },
+                    duration: 3000,
+                });
+            } else {
+                toast.success('Sản phẩm đã được kích hoạt', {
+                    duration: 2000,
+                });
+            }
+            
         } catch (error) {
             console.error('Error updating product status:', error);
+            toast.error('Lỗi cập nhật trạng thái sản phẩm');
         }
     };
 
@@ -173,40 +249,43 @@ export default function ProductsPage() {
         );
     };
 
+    // ✅ Enhanced ProductCard with larger images
     const ProductCard = ({ product }) => (
         <div className={`bg-white rounded-lg shadow-sm border-2 border-gray-300 hover:shadow-md hover:border-gray-400 transition-all duration-200 overflow-hidden ${!product.active ? 'opacity-75' : ''}`}>
             <div className="p-4">
-                <div className="flex items-start gap-3 mb-3">
+                {/* ✅ Larger image section */}
+                <div className="mb-4">
                     <img 
-                        src={product.images?.[0] || "https://via.placeholder.com/60"} 
+                        src={product.images?.[0] || "https://via.placeholder.com/300x200"} 
                         alt={product.name} 
-                        className="w-16 h-16 rounded-lg object-cover flex-shrink-0 border-2 border-gray-200"
+                        className="w-full h-48 rounded-lg object-cover border-2 border-gray-200" // ✅ Larger image
                     />
-                    <div className="flex-1 min-w-0">
-                        <h3 className="font-medium text-gray-900 truncate mb-1">{product.name}</h3>
-                        <div className="flex flex-wrap gap-1 text-xs mb-2">
-                            <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full border border-blue-200">
-                                {product.category}
-                            </span>
-                            <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-full border border-gray-300">
-                                {product.subCategory}
-                            </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span className="text-xs text-gray-500">Trạng thái:</span>
-                            <ToggleSwitch 
-                                isActive={product.active}
-                                onToggle={() => toggleActive(product._id)}
-                            />
-                            <span className={`text-xs font-medium ${product.active ? 'text-green-600' : 'text-gray-500'}`}>
-                                {product.active ? 'Hoạt động' : 'Tạm dừng'}
-                            </span>
-                        </div>
+                </div>
+                
+                <div className="mb-3">
+                    <h3 className="font-medium text-gray-900 mb-2 text-lg">{product.name}</h3>
+                    <div className="flex flex-wrap gap-2 text-sm mb-3">
+                        <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full border border-blue-200">
+                            {product.category}
+                        </span>
+                        <span className="px-3 py-1 bg-gray-100 text-gray-600 rounded-full border border-gray-300">
+                            {product.subCategory}
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-2 mb-3">
+                        <span className="text-sm text-gray-500">Trạng thái:</span>
+                        <ToggleSwitch 
+                            isActive={product.active}
+                            onToggle={() => toggleActive(product._id)}
+                        />
+                        <span className={`text-sm font-medium ${product.active ? 'text-green-600' : 'text-gray-500'}`}>
+                            {product.active ? 'Hoạt động' : 'Tạm dừng'}
+                        </span>
                     </div>
                 </div>
                 
-                <div className="flex items-center justify-between mb-3 pb-3 border-b border-gray-200">
-                    <div className="text-lg font-semibold text-blue-600">
+                <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-200">
+                    <div className="text-xl font-semibold text-blue-600">
                         {product.price?.toLocaleString()}₫
                     </div>
                     <div className="text-sm text-gray-500">Kho: {product.stock}</div>
@@ -271,19 +350,39 @@ export default function ProductsPage() {
         router.push(`/products/${productId}/edit`);
     };
 
+    // ✅ Enhanced delete with toast warning and soft delete
     const handleDelete = async (productId) => {
-        if (confirm('Bạn có chắc chắn muốn xóa sản phẩm này?')) {
+        if (confirm('Bạn có chắc chắn muốn xóa sản phẩm này? Sản phẩm sẽ được chuyển sang trạng thái tạm dừng.')) {
             try {
-                // TODO: Call API để xóa sản phẩm
+                // TODO: Call API để soft delete (set isActive = false)
                 // const response = await fetch(`http://localhost:3000/api/products/${productId}`, {
-                //     method: 'DELETE'
+                //     method: 'PATCH',
+                //     headers: { 'Content-Type': 'application/json' },
+                //     body: JSON.stringify({ isActive: false })
                 // });
                 
-                // Temporary: Remove from UI
-                setProductList(prev => prev.filter(product => product._id !== productId));
-                console.log('Deleted product:', productId);
+                // Update UI: Set product to inactive instead of removing
+                setProductList(prev => prev.map(product => 
+                    product._id === productId 
+                        ? { ...product, active: false }
+                        : product
+                ));
+                
+                // ✅ Show warning toast for deletion
+                toast('Sản phẩm đã được chuyển sang trạng thái tạm dừng', {
+                    icon: '⚠️',
+                    style: {
+                        borderRadius: '10px',
+                        background: '#F59E0B',
+                        color: '#fff',
+                        fontWeight: 'bold',
+                    },
+                    duration: 4000,
+                });
+                
             } catch (error) {
                 console.error('Error deleting product:', error);
+                toast.error('Lỗi khi xóa sản phẩm');
             }
         }
     };
@@ -377,22 +476,48 @@ export default function ProductsPage() {
                         </div>
                     </div>
 
-                    {/* Filter Panel */}
+                    {/* ✅ Enhanced Filter Panel with dynamic subcategories */}
                     {showFilters && (
                         <div className="mt-4 p-4 bg-white rounded-lg border-2 border-gray-300 shadow-sm">
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                                 {/* Category Filter */}
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">Danh mục</label>
                                     <select
                                         value={filters.category}
-                                        onChange={(e) => setFilters(prev => ({ ...prev, category: e.target.value }))}
+                                        onChange={(e) => setFilters(prev => ({ 
+                                            ...prev, 
+                                            category: e.target.value,
+                                            subcategory: "" // Reset subcategory when category changes
+                                        }))}
                                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                     >
                                         <option value="">Tất cả danh mục</option>
-                                        <option value="Điện thoại">Điện thoại</option>
-                                        <option value="Laptop">Laptop</option>
-                                        <option value="Tablet">Tablet</option>
+                                        {categories.map(category => (
+                                            <option key={category._id} value={category._id}>
+                                                {category.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* ✅ Dynamic Subcategory Filter */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Danh mục con</label>
+                                    <select
+                                        value={filters.subcategory}
+                                        onChange={(e) => setFilters(prev => ({ ...prev, subcategory: e.target.value }))}
+                                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        disabled={!filters.category}
+                                    >
+                                        <option value="">
+                                            {!filters.category ? "Chọn danh mục trước" : "Tất cả danh mục con"}
+                                        </option>
+                                        {filteredSubcategories.map(subcategory => (
+                                            <option key={subcategory._id} value={subcategory._id}>
+                                                {subcategory.name}
+                                            </option>
+                                        ))}
                                     </select>
                                 </div>
 
@@ -495,10 +620,11 @@ export default function ProductsPage() {
                                                     <tr key={product._id} className={`hover:bg-gray-50 transition-colors ${!product.active ? 'opacity-60' : ''}`}>
                                                         <td className="py-4 px-6 border-r border-gray-200">
                                                             <div className="flex items-center gap-3">
+                                                                {/* ✅ Larger image in table */}
                                                                 <img 
-                                                                    src={product.images?.[0] || "https://via.placeholder.com/60"} 
+                                                                    src={product.images?.[0] || "https://via.placeholder.com/80"} 
                                                                     alt={product.name} 
-                                                                    className="w-12 h-12 rounded-lg object-cover border border-gray-200"
+                                                                    className="w-16 h-16 rounded-lg object-cover border border-gray-200" // ✅ Increased from w-12 h-12
                                                                 />
                                                                 <div>
                                                                     <div className="font-medium text-gray-900">{product.name}</div>

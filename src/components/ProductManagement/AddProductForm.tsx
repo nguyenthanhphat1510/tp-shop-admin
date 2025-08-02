@@ -5,38 +5,45 @@ import { useRouter } from "next/navigation";
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import toast from 'react-hot-toast'; // ✅ Add toast import
 
-// ✅ Enhanced validation schema
+// ✅ Update validation schema
 const productSchema = z.object({
-  name: z.string()
-    .min(1, "Tên sản phẩm là bắt buộc")
-    .min(3, "Tên sản phẩm phải có ít nhất 3 ký tự")
-    .max(100, "Tên sản phẩm không được quá 100 ký tự"),
-  
-  price: z.number()
-    .min(1, "Giá phải lớn hơn 0")
-    .max(999999999, "Giá không được quá 999,999,999"),
-  
-  stock: z.number()
-    .min(0, "Số lượng không được âm")
-    .max(99999, "Số lượng không được quá 99,999"),
-  
-  categoryId: z.string()
-    .min(1, "Vui lòng chọn danh mục"),
-  
-  subcategoryId: z.string().optional(),
-  
-  description: z.string()
-    .max(1000, "Mô tả không được quá 1000 ký tự")
-    .optional(),
-  
-  isActive: z.boolean()
+    name: z.string()
+        .min(1, "Tên sản phẩm là bắt buộc")
+        .min(3, "Tên sản phẩm phải có ít nhất 3 ký tự")
+        .max(100, "Tên sản phẩm không được quá 100 ký tự"),
+
+    price: z.number({
+        required_error: "Vui lòng nhập giá sản phẩm",
+        invalid_type_error: "Giá phải là số"
+    })
+        .min(1, "Giá phải lớn hơn 0")
+        .max(999999999, "Giá không được quá 999,999,999"),
+
+    stock: z.number({
+        required_error: "Vui lòng nhập số lượng",
+        invalid_type_error: "Số lượng phải là số"
+    })
+        .min(0, "Số lượng không được âm")
+        .max(99999, "Số lượng không được quá 99,999"),
+
+    categoryId: z.string()
+        .min(1, "Vui lòng chọn danh mục"),
+
+    subcategoryId: z.string().optional(),
+
+    description: z.string()
+        .max(1000, "Mô tả không được quá 1000 ký tự")
+        .optional(),
+
+    isActive: z.boolean()
 });
 
 export default function AddProductForm() {
     const router = useRouter();
     const fileInputRef = useRef(null);
-    
+
     // ✅ States
     const [images, setImages] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -45,11 +52,11 @@ export default function AddProductForm() {
     const [subcategories, setSubcategories] = useState([]);
     const [loadingCategories, setLoadingCategories] = useState(true);
     const [loadingSubcategories, setLoadingSubcategories] = useState(false);
-    
+
     // ✅ React Hook Form setup
     const {
         register,
-        handleSubmit, // ← Only this handleSubmit
+        handleSubmit,
         formState: { errors },
         setValue,
         watch,
@@ -58,8 +65,6 @@ export default function AddProductForm() {
         resolver: zodResolver(productSchema),
         defaultValues: {
             name: "",
-            price: 0,
-            stock: 0,
             categoryId: "",
             subcategoryId: "",
             description: "",
@@ -72,7 +77,7 @@ export default function AddProductForm() {
     useEffect(() => {
         fetchCategories();
     }, []);
-    
+
     useEffect(() => {
         if (watchedCategoryId) {
             fetchSubcategories(watchedCategoryId);
@@ -81,19 +86,19 @@ export default function AddProductForm() {
             setValue("subcategoryId", "");
         }
     }, [watchedCategoryId, setValue]);
-    
+
     const fetchCategories = async () => {
         try {
             setLoadingCategories(true);
             console.log('🔄 Fetching categories from backend...');
-            
+
             // ✅ Port 3000 là đúng
             const response = await fetch('http://localhost:3000/api/categories');
-            
+
             if (!response.ok) {
                 throw new Error('Không thể tải danh mục');
             }
-            
+
             const data = await response.json();
             console.log('✅ Categories loaded:', data);
             setCategories(data);
@@ -104,19 +109,19 @@ export default function AddProductForm() {
             setLoadingCategories(false);
         }
     };
-    
+
     const fetchSubcategories = async (categoryId) => {
         try {
             setLoadingSubcategories(true);
             console.log('🔄 Fetching subcategories for category:', categoryId);
-            
+
             // ✅ Port 3000 là đúng  
             const response = await fetch(`http://localhost:3000/api/subcategories/category/${categoryId}`);
-            
+
             if (!response.ok) {
                 throw new Error('Không thể tải danh mục con');
             }
-            
+
             const data = await response.json();
             console.log('✅ Subcategories loaded:', data);
             setSubcategories(data);
@@ -132,79 +137,85 @@ export default function AddProductForm() {
     const onSubmit = async (data) => {
         setLoading(true);
         setError("");
-        
+
         try {
             console.log('🚀 Form data:', data);
             console.log('📷 Images:', images);
-            
-            // ✅ Debug: Kiểm tra data trước khi gửi
-            console.log('Data validation:');
-            console.log('- Name:', data.name);
-            console.log('- Price:', data.price, typeof data.price);
-            console.log('- Stock:', data.stock, typeof data.stock);
-            console.log('- CategoryId:', data.categoryId);
-            console.log('- SubcategoryId:', data.subcategoryId);
-            console.log('- Images count:', images.length);
-            
+
             const submitData = new FormData();
-            
-            // ✅ Append form fields với validation
+
+            // ✅ Append form fields
             Object.keys(data).forEach(key => {
                 const value = data[key];
                 console.log(`Appending ${key}:`, value, typeof value);
-                
+
                 // Convert boolean to string
                 if (typeof value === 'boolean') {
                     submitData.append(key, value.toString());
                 } else if (value !== undefined && value !== null && value !== '') {
-                    submitData.append(key, value);
+                    submitData.append(key, value.toString());
                 }
             });
-            
+
             // ✅ Append images
-            images.forEach((image, index) => {
-                console.log(`Appending image ${index}:`, image.file.name, image.file.type, image.file.size);
-                submitData.append('images', image.file);
+            images.forEach((image) => {
+                console.log(`Appending file:`, image.file.name, image.file.type, image.file.size);
+                submitData.append('files', image.file);
             });
-            
+
             // ✅ Debug FormData contents
             console.log('FormData contents:');
             for (let [key, value] of submitData.entries()) {
                 console.log(key, value);
             }
-            
+
             const response = await fetch('http://localhost:3000/api/products', {
                 method: 'POST',
                 body: submitData
             });
-            
+
             console.log('Response status:', response.status);
-            console.log('Response headers:', response.headers);
-            
+
             if (!response.ok) {
                 const errorData = await response.json();
                 console.log('Error response:', errorData);
                 throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
             }
-            
+
             const result = await response.json();
             console.log('Success response:', result);
-            
+
+            // ✅ Show success toast
+            toast.success('Thêm sản phẩm thành công!', {
+                duration: 3000,
+                icon: '🎉',
+            });
+
             reset();
             setImages([]);
-            router.push('/products');
-            
+
+            // ✅ Delay redirect to show toast
+            setTimeout(() => {
+                router.push('/products');
+            }, 1000);
+
         } catch (error) {
             console.error('Submit error:', error);
             setError(error.message);
+
+            // ✅ Show error toast
+            toast.error(`Lỗi: ${error.message}`, {
+                duration: 4000,
+                icon: '❌',
+            });
         } finally {
             setLoading(false);
         }
     };
-    
+
     const handleImageUpload = (e) => {
         const files = Array.from(e.target.files);
-        
+
         files.forEach(file => {
             if (file.type.startsWith('image/')) {
                 const reader = new FileReader();
@@ -218,16 +229,16 @@ export default function AddProductForm() {
                 reader.readAsDataURL(file);
             }
         });
-        
+
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
         }
     };
-    
+
     const removeImage = (id) => {
         setImages(prev => prev.filter(img => img.id !== id));
     };
-    
+
     return (
         <div className="max-w-4xl mx-auto">
             {/* Header */}
@@ -262,17 +273,16 @@ export default function AddProductForm() {
                                 </label>
                                 <input
                                     {...register("name")}
-                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white placeholder-gray-400 ${
-                                        errors.name ? 'border-red-500' : 'border-gray-300'
-                                    }`}
+                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white placeholder-gray-400 ${errors.name ? 'border-red-500' : 'border-gray-300'
+                                        }`}
                                     placeholder="Nhập tên sản phẩm"
                                 />
                                 {errors.name && (
                                     <p className="text-red-500 text-sm mt-1">{errors.name.message}</p>
                                 )}
                             </div>
-                            
-                            {/* Price field */}
+
+                            {/* Price field - Fix styling */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-900 mb-1">
                                     Giá bán *
@@ -280,36 +290,34 @@ export default function AddProductForm() {
                                 <input
                                     type="number"
                                     {...register("price", { valueAsNumber: true })}
-                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white placeholder-gray-400 ${
-                                        errors.price ? 'border-red-500' : 'border-gray-300'
-                                    }`}
-                                    placeholder="0"
+                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white placeholder-gray-400 ${errors.price ? 'border-red-500' : 'border-gray-300'
+                                        }`}
+                                    placeholder="Nhập giá sản phẩm"
                                     min="0"
                                 />
                                 {errors.price && (
                                     <p className="text-red-500 text-sm mt-1">{errors.price.message}</p>
                                 )}
                             </div>
-                            
-                            {/* Stock field */}
+
+                            {/* Stock field - Fix styling */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label className="block text-sm font-medium text-gray-900 mb-1">
                                     Số lượng *
                                 </label>
                                 <input
                                     type="number"
                                     {...register("stock", { valueAsNumber: true })}
-                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                                        errors.stock ? 'border-red-500' : 'border-gray-300'
-                                    }`}
-                                    placeholder="0"
+                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white placeholder-gray-400 ${errors.stock ? 'border-red-500' : 'border-gray-300'
+                                        }`}
+                                    placeholder="Nhập số lượng sản phẩm"
                                     min="0"
                                 />
                                 {errors.stock && (
                                     <p className="text-red-500 text-sm mt-1">{errors.stock.message}</p>
                                 )}
                             </div>
-                            
+
                             {/* Category field - Fix text color */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-900 mb-1">
@@ -317,9 +325,8 @@ export default function AddProductForm() {
                                 </label>
                                 <select
                                     {...register("categoryId")}
-                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white ${
-                                        errors.categoryId ? 'border-red-500' : 'border-gray-300'
-                                    }`}
+                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white ${errors.categoryId ? 'border-red-500' : 'border-gray-300'
+                                        }`}
                                     disabled={loadingCategories}
                                 >
                                     <option value="" className="text-gray-500">
@@ -335,7 +342,7 @@ export default function AddProductForm() {
                                     <p className="text-red-500 text-sm mt-1">{errors.categoryId.message}</p>
                                 )}
                             </div>
-                            
+
                             {/* Subcategory field - Fix text color */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-900 mb-1">
@@ -347,13 +354,13 @@ export default function AddProductForm() {
                                     disabled={!watchedCategoryId || loadingSubcategories}
                                 >
                                     <option value="" className="text-gray-500">
-                                        {loadingSubcategories 
-                                            ? "Đang tải..." 
-                                            : !watchedCategoryId 
-                                            ? "Chọn danh mục trước"
-                                            : subcategories.length === 0
-                                            ? "Không có danh mục con"
-                                            : "Chọn danh mục con"
+                                        {loadingSubcategories
+                                            ? "Đang tải..."
+                                            : !watchedCategoryId
+                                                ? "Chọn danh mục trước"
+                                                : subcategories.length === 0
+                                                    ? "Không có danh mục con"
+                                                    : "Chọn danh mục con"
                                         }
                                     </option>
                                     {subcategories.map(subcategory => (
@@ -363,7 +370,7 @@ export default function AddProductForm() {
                                     ))}
                                 </select>
                             </div>
-                            
+
                             {/* IsActive checkbox */}
                             <div className="flex items-center">
                                 <input
@@ -377,28 +384,27 @@ export default function AddProductForm() {
                             </div>
                         </div>
                     </div>
-                    
+
                     {/* Description */}
                     <div>
                         <h3 className="text-lg font-medium text-gray-900 mb-4">Mô tả sản phẩm</h3>
                         <textarea
                             {...register("description")}
                             rows={4}
-                            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white placeholder-gray-400 ${
-                                errors.description ? 'border-red-500' : 'border-gray-300'
-                            }`}
+                            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white placeholder-gray-400 ${errors.description ? 'border-red-500' : 'border-gray-300'
+                                }`}
                             placeholder="Nhập mô tả chi tiết về sản phẩm..."
                         />
                         {errors.description && (
                             <p className="text-red-500 text-sm mt-1">{errors.description.message}</p>
                         )}
                     </div>
-                    
+
                     {/* Images */}
                     <div>
                         <h3 className="text-lg font-medium text-gray-900 mb-4">Hình ảnh sản phẩm</h3>
-                        
-                        <div 
+
+                        <div
                             className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-gray-400 cursor-pointer"
                             onClick={() => fileInputRef.current?.click()}
                         >
@@ -410,12 +416,12 @@ export default function AddProductForm() {
                                 multiple
                                 className="hidden"
                             />
-                            
+
                             <Upload className="w-10 h-10 text-gray-400 mx-auto mb-3" />
                             <p className="text-gray-600 mb-1">Nhấp để chọn hình ảnh</p>
                             <p className="text-gray-500 text-sm">JPG, PNG (tối đa 5MB)</p>
                         </div>
-                        
+
                         {/* Image previews */}
                         {images.length > 0 && (
                             <div className="mt-4 grid grid-cols-3 md:grid-cols-5 gap-3">
@@ -438,7 +444,7 @@ export default function AddProductForm() {
                             </div>
                         )}
                     </div>
-                    
+
                     {/* Submit buttons */}
                     <div className="flex justify-end gap-3 pt-6 border-t border-gray-200">
                         <button
@@ -448,7 +454,7 @@ export default function AddProductForm() {
                         >
                             Hủy
                         </button>
-                        
+
                         <button
                             type="submit"
                             disabled={loading}

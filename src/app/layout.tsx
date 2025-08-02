@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar/Sidebar";
+import { Toaster } from "react-hot-toast";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,6 +33,30 @@ export default function RootLayout({
           <Sidebar />
           <main className="ml-64 flex-1 min-h-screen">{children}</main>
         </div>
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            duration: 4000,
+            style: {
+              background: "#363636",
+              color: "#fff",
+            },
+            success: {
+              duration: 3000,
+              style: {
+                background: "#10B981",
+                color: "#fff",
+              },
+            },
+            error: {
+              duration: 4000,
+              style: {
+                background: "#EF4444",
+                color: "#fff",
+              },
+            },
+          }}
+        />
       </body>
     </html>
   );
