@@ -3,13 +3,15 @@ import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard, Users, Package, ShoppingCart, BarChart2, Settings,
+  LayoutDashboard, Users, Package, ShoppingCart, BarChart2, Settings, FolderOpen, FolderTree
 } from "lucide-react";
 
 // Danh sách menu điều hướng
 const navs = [
   { label: "Tổng Quan", icon: <LayoutDashboard className="w-5 h-5" />, page: "dashboard", href: "/" },
   { label: "Người Dùng", icon: <Users className="w-5 h-5" />, page: "users", href: "/users" },
+  { label: "Danh Mục", icon: <FolderOpen className="w-5 h-5" />, page: "categories", href: "/categories" },
+  { label: "Danh Mục Con", icon: <FolderTree className="w-5 h-5" />, page: "subcategories", href: "/subcategories" },
   { label: "Sản Phẩm", icon: <Package className="w-5 h-5" />, page: "products", href: "/products" },
   { label: "Đơn Hàng", icon: <ShoppingCart className="w-5 h-5" />, page: "orders", href: "/orders" },
   { label: "Báo Cáo", icon: <BarChart2 className="w-5 h-5" />, page: "analytics", href: "/analytics" },
@@ -18,6 +20,15 @@ const navs = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  
+  // ✅ Check active state cho cả exact path và nested paths
+  const isActive = (href) => {
+    if (href === "/") {
+      return pathname === "/";
+    }
+    return pathname.startsWith(href);
+  };
+  
   return (
     <aside
       className="fixed left-0 top-0 h-screen w-64 flex flex-col z-10"
@@ -41,7 +52,7 @@ export default function Sidebar() {
             key={n.page}
             href={n.href}
             className={`flex items-center gap-3 px-6 py-3 w-full text-left rounded transition 
-              ${pathname === n.href
+              ${isActive(n.href)
                 ? "bg-white/20 text-white font-semibold"
                 : "text-white/80 hover:bg-white/10"}`}
           >
