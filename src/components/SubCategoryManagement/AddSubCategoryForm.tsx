@@ -13,8 +13,8 @@ export default function AddSubCategoryForm() {
     
     const [formData, setFormData] = useState({
         name: "",
-        categoryId: "",
-        isActive: true
+        categoryId: ""
+        // ✅ Bỏ isActive field
     });
 
     // Fetch categories for dropdown
@@ -67,11 +67,11 @@ export default function AddSubCategoryForm() {
     };
 
     const handleInputChange = (e) => {
-        const { name, value, type, checked } = e.target;
+        const { name, value } = e.target;
         
         setFormData(prev => ({
             ...prev,
-            [name]: type === 'checkbox' ? checked : value
+            [name]: value
         }));
 
         // Clear error when user starts typing
@@ -100,7 +100,10 @@ export default function AddSubCategoryForm() {
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify(formData)
+                body: JSON.stringify({
+                    ...formData,
+                    // ✅ isActive sẽ được set default = true trong service
+                })
             });
 
             console.log(`📡 Response status: ${response.status}`);
@@ -147,17 +150,17 @@ export default function AddSubCategoryForm() {
                 <div className="flex items-center gap-4">
                     <button
                         onClick={handleCancel}
-                        className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
+                        className="flex items-center gap-2 text-black hover:text-gray-700 transition-colors"
                         disabled={loading}
                     >
                         <ArrowLeft className="w-5 h-5" />
                         <span>Quay lại</span>
                     </button>
                     <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-                            <Folder className="w-4 h-4 text-purple-600" />
+                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                            <Folder className="w-4 h-4 text-blue-600" />
                         </div>
-                        <h2 className="text-xl font-semibold text-gray-900">
+                        <h2 className="text-xl font-semibold text-black">
                             Thông tin danh mục con
                         </h2>
                     </div>
@@ -169,7 +172,7 @@ export default function AddSubCategoryForm() {
                 <div className="space-y-6">
                     {/* Category Selection */}
                     <div>
-                        <label htmlFor="categoryId" className="block text-sm font-medium text-gray-700 mb-2">
+                        <label htmlFor="categoryId" className="block text-sm font-medium text-black mb-2">
                             Danh mục cha <span className="text-red-500">*</span>
                         </label>
                         {categoriesLoading ? (
@@ -183,7 +186,7 @@ export default function AddSubCategoryForm() {
                                 name="categoryId"
                                 value={formData.categoryId}
                                 onChange={handleInputChange}
-                                className={`w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-colors ${
+                                className={`w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors text-black ${
                                     errors.categoryId ? 'border-red-500 bg-red-50' : 'border-gray-300'
                                 }`}
                                 disabled={loading}
@@ -206,7 +209,7 @@ export default function AddSubCategoryForm() {
 
                     {/* SubCategory Name */}
                     <div>
-                        <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
+                        <label htmlFor="name" className="block text-sm font-medium text-black mb-2">
                             Tên danh mục con <span className="text-red-500">*</span>
                         </label>
                         <input
@@ -216,7 +219,7 @@ export default function AddSubCategoryForm() {
                             value={formData.name}
                             onChange={handleInputChange}
                             placeholder="Nhập tên danh mục con..."
-                            className={`w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-colors ${
+                            className={`w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors text-black ${
                                 errors.name ? 'border-red-500 bg-red-50' : 'border-gray-300'
                             }`}
                             disabled={loading}
@@ -227,37 +230,8 @@ export default function AddSubCategoryForm() {
                                 <span className="text-sm">{errors.name}</span>
                             </div>
                         )}
-                    </div>
-
-                    {/* Status Toggle */}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-3">
-                            Trạng thái
-                        </label>
-                        <div className="flex items-center gap-3">
-                            <button
-                                type="button"
-                                onClick={() => setFormData(prev => ({ ...prev, isActive: !prev.isActive }))}
-                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
-                                    formData.isActive ? 'bg-purple-600' : 'bg-gray-300'
-                                }`}
-                                disabled={loading}
-                            >
-                                <span
-                                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ease-in-out ${
-                                        formData.isActive ? 'translate-x-6' : 'translate-x-1'
-                                    }`}
-                                />
-                            </button>
-                            <span className={`text-sm font-medium ${formData.isActive ? 'text-purple-600' : 'text-gray-500'}`}>
-                                {formData.isActive ? 'Hoạt động' : 'Tạm dừng'}
-                            </span>
-                        </div>
-                        <p className="mt-2 text-sm text-gray-500">
-                            {formData.isActive 
-                                ? 'Danh mục con sẽ hiển thị và có thể sử dụng ngay' 
-                                : 'Danh mục con sẽ ở trạng thái tạm dừng'
-                            }
+                        <p className="mt-2 text-sm text-gray-600">
+                            Danh mục con sẽ được tạo với trạng thái hoạt động mặc định
                         </p>
                     </div>
                 </div>
@@ -267,7 +241,7 @@ export default function AddSubCategoryForm() {
                     <button
                         type="button"
                         onClick={handleCancel}
-                        className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                        className="flex-1 px-4 py-3 border border-gray-300 text-black bg-white rounded-lg hover:bg-gray-50 font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
                         disabled={loading}
                     >
                         Hủy
@@ -275,7 +249,7 @@ export default function AddSubCategoryForm() {
                     <button
                         type="submit"
                         disabled={loading || categoriesLoading}
-                        className="flex-1 flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-3 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {loading ? (
                             <>

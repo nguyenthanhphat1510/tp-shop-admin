@@ -7,34 +7,34 @@ import toast from 'react-hot-toast';
 export default function CategoryManagement() {
     const router = useRouter();
     const [search, setSearch] = useState("");
-    const [viewMode, setViewMode] = useState("table"); 
+    const [viewMode, setViewMode] = useState("table");
     const [categoryList, setCategoryList] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    
+
     // Filter states
     const [showFilters, setShowFilters] = useState(false);
     const [filters, setFilters] = useState({
         status: "", // "active", "inactive", ""
         sortBy: "name" // "name", "createdAt", "updatedAt"
     });
-    
+
     // Fetch categories từ API
     useEffect(() => {
         const fetchCategories = async () => {
             try {
                 setLoading(true);
                 console.log('🔍 Fetching categories...');
-                
+
                 const response = await fetch('http://localhost:3000/api/categories');
-                
+
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
-                
+
                 const data = await response.json();
                 console.log('✅ Categories data received:', data);
-                
+
                 // Transform data để đảm bảo consistency
                 const transformedData = data.map(category => ({
                     _id: category._id,
@@ -44,7 +44,7 @@ export default function CategoryManagement() {
                     createdAt: category.createdAt,
                     updatedAt: category.updatedAt
                 }));
-                
+
                 setCategoryList(transformedData);
                 setError(null);
             } catch (err) {
@@ -57,19 +57,19 @@ export default function CategoryManagement() {
 
         fetchCategories();
     }, []);
-    
+
     // Filter categories
     const filtered = categoryList.filter((category) => {
         // Search filter
-        const matchesSearch = !search || 
+        const matchesSearch = !search ||
             category.name?.toLowerCase().includes(search.toLowerCase()) ||
             category.description?.toLowerCase().includes(search.toLowerCase());
-        
+
         // Status filter
-        const matchesStatus = !filters.status || 
+        const matchesStatus = !filters.status ||
             (filters.status === "active" && category.active) ||
             (filters.status === "inactive" && !category.active);
-        
+
         return matchesSearch && matchesStatus;
     }).sort((a, b) => {
         // Sort logic
@@ -101,7 +101,7 @@ export default function CategoryManagement() {
     const toggleActive = async (categoryId) => {
         try {
             console.log(`🔄 Toggling status for category: ${categoryId}`);
-            
+
             // ✅ Sử dụng đúng endpoint từ controller
             const response = await fetch(`http://localhost:3000/api/categories/${categoryId}/toggle-status`, {
                 method: 'PATCH',
@@ -119,8 +119,8 @@ export default function CategoryManagement() {
             console.log('✅ Toggle response:', result);
 
             // ✅ Update UI với trạng thái mới từ server
-            setCategoryList(prev => prev.map(category => 
-                category._id === categoryId 
+            setCategoryList(prev => prev.map(category =>
+                category._id === categoryId
                     ? { ...category, active: result.isActive === "true" || result.isActive === true }
                     : category
             ));
@@ -143,7 +143,7 @@ export default function CategoryManagement() {
                     duration: 3000,
                 });
             }
-            
+
         } catch (error) {
             console.error('❌ Error updating category status:', error);
             toast.error(`Lỗi: ${error.message}`);
@@ -171,7 +171,7 @@ export default function CategoryManagement() {
 
     const ActionButton = ({ onClick, variant = "primary", size = "sm", children, disabled = false }) => {
         const baseClasses = "inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed";
-        
+
         const variants = {
             primary: "bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500 shadow-sm hover:shadow-md",
             success: "bg-green-600 hover:bg-green-700 text-white focus:ring-green-500 shadow-sm hover:shadow-md",
@@ -179,13 +179,13 @@ export default function CategoryManagement() {
             secondary: "bg-gray-100 hover:bg-gray-200 text-gray-700 focus:ring-gray-500 border border-gray-300",
             outline: "border-2 border-gray-300 hover:border-gray-400 text-gray-700 hover:bg-gray-50 focus:ring-gray-500"
         };
-        
+
         const sizes = {
             sm: "px-3 py-2 text-sm",
             md: "px-4 py-2.5 text-sm",
             lg: "px-6 py-3 text-base"
         };
-        
+
         return (
             <button
                 onClick={onClick}
@@ -207,7 +207,7 @@ export default function CategoryManagement() {
                         <FolderOpen className="w-8 h-8 text-blue-600" />
                     </div>
                 </div>
-                
+
                 <div className="mb-4 text-center">
                     <h3 className="font-medium text-gray-900 mb-2 text-lg">{category.name}</h3>
                     {category.description && (
@@ -215,7 +215,7 @@ export default function CategoryManagement() {
                     )}
                     <div className="flex items-center justify-center gap-2 mb-3">
                         <span className="text-sm text-gray-500">Trạng thái:</span>
-                        <ToggleSwitch 
+                        <ToggleSwitch
                             isActive={category.active}
                             onToggle={() => toggleActive(category._id)}
                         />
@@ -224,7 +224,7 @@ export default function CategoryManagement() {
                         </span>
                     </div>
                 </div>
-                
+
                 <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-200">
                     <div className="text-sm text-gray-500">
                         Tạo: {new Date(category.createdAt).toLocaleDateString('vi-VN')}
@@ -233,18 +233,18 @@ export default function CategoryManagement() {
                         Cập nhật: {new Date(category.updatedAt).toLocaleDateString('vi-VN')}
                     </div>
                 </div>
-                
+
                 <div className="flex gap-2">
-                    <ActionButton 
-                        variant="secondary" 
+                    <ActionButton
+                        variant="secondary"
                         size="sm"
                         onClick={() => handleEdit(category._id)}
                     >
                         <Edit className="w-4 h-4" />
                         Sửa
                     </ActionButton>
-                    <ActionButton 
-                        variant="danger" 
+                    <ActionButton
+                        variant="danger"
                         size="sm"
                         onClick={() => handleDelete(category._id)}
                     >
@@ -278,7 +278,7 @@ export default function CategoryManagement() {
                     </div>
                     <h3 className="text-lg font-medium text-gray-900 mb-2">Lỗi tải dữ liệu</h3>
                     <p className="text-gray-500 mb-4">{error}</p>
-                    <button 
+                    <button
                         onClick={() => window.location.reload()}
                         className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
                     >
@@ -298,7 +298,7 @@ export default function CategoryManagement() {
         if (confirm('Bạn có chắc chắn muốn xóa danh mục này? Danh mục sẽ được chuyển sang trạng thái tạm dừng.')) {
             try {
                 console.log(`🗑️ Soft deleting category: ${categoryId}`);
-                
+
                 // ✅ Sử dụng soft-delete endpoint thay vì DELETE
                 const response = await fetch(`http://localhost:3000/api/categories/${categoryId}/soft-delete`, {
                     method: 'PATCH',
@@ -316,12 +316,12 @@ export default function CategoryManagement() {
                 console.log('✅ Soft delete response:', result);
 
                 // ✅ Set thành inactive dựa trên response từ server
-                setCategoryList(prev => prev.map(category => 
-                    category._id === categoryId 
+                setCategoryList(prev => prev.map(category =>
+                    category._id === categoryId
                         ? { ...category, active: result.isActive === "true" || result.isActive === true }
                         : category
                 ));
-                
+
                 toast('Danh mục đã được chuyển sang trạng thái tạm dừng', {
                     icon: '⚠️',
                     style: {
@@ -332,7 +332,7 @@ export default function CategoryManagement() {
                     },
                     duration: 4000,
                 });
-                
+
             } catch (error) {
                 console.error('❌ Error soft deleting category:', error);
                 toast.error(`Lỗi: ${error.message}`);
@@ -354,7 +354,7 @@ export default function CategoryManagement() {
                                 Quản lý danh sách danh mục sản phẩm ({categoryList.length} danh mục)
                             </p>
                         </div>
-                        <button 
+                        <button
                             onClick={() => router.push('/categories/add')}
                             className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-colors shadow-sm"
                         >
@@ -367,32 +367,31 @@ export default function CategoryManagement() {
                     <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center">
                         <div className="relative flex-1 max-w-md">
                             <input
-                                className="w-full border-2 border-gray-400 rounded-lg pl-10 pr-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+                                className="w-full border-2 border-black text-black rounded-lg pl-10 pr-4 py-3 focus:ring-2 focus:ring-black focus:border-black outline-none transition-colors"
                                 placeholder="Tìm kiếm danh mục..."
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                             />
-                            <Search className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" />
+                            <Search className="absolute left-3 top-3.5 w-5 h-5 text-black" />
                         </div>
-                        
+
                         <div className="flex gap-2">
-                            <button 
+                            <button
                                 onClick={() => setShowFilters(!showFilters)}
-                                className={`flex items-center gap-2 px-4 py-3 border-2 rounded-lg transition-colors ${
-                                    showFilters || hasActiveFilters
-                                        ? "border-blue-500 bg-blue-50 text-blue-700" 
-                                        : "border-gray-400 hover:bg-gray-50 hover:border-gray-500"
-                                }`}
+                                className={`flex items-center gap-2 px-4 py-3 border-2 rounded-lg transition-colors ${+   showFilters || hasActiveFilters
+                                    ? "border-black bg-black text-white"
+                                    : "border-black text-black hover:bg-gray-100"
+                                    }`}
                             >
                                 <Filter className="w-4 h-4" />
                                 <span className="hidden sm:inline">Lọc</span>
                                 {hasActiveFilters && (
-                                    <span className="bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                                    <span className="bg-black text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
                                         {Object.values(filters).filter(f => f !== "" && f !== "name").length + (search ? 1 : 0)}
                                     </span>
                                 )}
                             </button>
-                            
+
                             {hasActiveFilters && (
                                 <button
                                     onClick={clearFilters}
@@ -402,26 +401,24 @@ export default function CategoryManagement() {
                                     <span className="hidden sm:inline">Xóa lọc</span>
                                 </button>
                             )}
-                            
+
                             {/* View Mode Toggle */}
                             <div className="hidden md:flex bg-gray-100 rounded-lg p-1 border-2 border-gray-300">
                                 <button
                                     onClick={() => setViewMode("table")}
-                                    className={`px-3 py-2 text-sm rounded-md transition-colors ${
-                                        viewMode === "table" 
-                                            ? "bg-white text-gray-900 shadow-sm border border-gray-300" 
-                                            : "text-gray-600 hover:text-gray-900"
-                                    }`}
+                                    className={`px-3 py-2 text-sm rounded-md transition-colors ${viewMode === "table"
+                                        ? "bg-white text-gray-900 shadow-sm border border-gray-300"
+                                        : "text-gray-600 hover:text-gray-900"
+                                        }`}
                                 >
                                     Bảng
                                 </button>
                                 <button
                                     onClick={() => setViewMode("card")}
-                                    className={`px-3 py-2 text-sm rounded-md transition-colors ${
-                                        viewMode === "card" 
-                                            ? "bg-white text-gray-900 shadow-sm border border-gray-300" 
-                                            : "text-gray-600 hover:text-gray-900"
-                                    }`}
+                                    className={`px-3 py-2 text-sm rounded-md transition-colors ${viewMode === "card"
+                                        ? "bg-white text-gray-900 shadow-sm border border-gray-300"
+                                        : "text-gray-600 hover:text-gray-900"
+                                        }`}
                                 >
                                     Thẻ
                                 </button>
@@ -439,7 +436,7 @@ export default function CategoryManagement() {
                                     <select
                                         value={filters.status}
                                         onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
-                                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        className="w-full border-2 border-black text-black rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-black"
                                     >
                                         <option value="">Tất cả trạng thái</option>
                                         <option value="active">Hoạt động</option>
@@ -453,7 +450,7 @@ export default function CategoryManagement() {
                                     <select
                                         value={filters.sortBy}
                                         onChange={(e) => setFilters(prev => ({ ...prev, sortBy: e.target.value }))}
-                                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        className="w-full border-2 border-black text-black rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-black"
                                     >
                                         <option value="name">Tên A-Z</option>
                                         <option value="createdAt">Mới nhất</option>
@@ -528,7 +525,7 @@ export default function CategoryManagement() {
                                                         </td>
                                                         <td className="py-4 px-6 border-r border-gray-200">
                                                             <div className="flex items-center gap-3">
-                                                                <ToggleSwitch 
+                                                                <ToggleSwitch
                                                                     isActive={category.active}
                                                                     onToggle={() => toggleActive(category._id)}
                                                                 />
@@ -544,16 +541,16 @@ export default function CategoryManagement() {
                                                         </td>
                                                         <td className="py-4 px-6">
                                                             <div className="flex gap-2">
-                                                                <ActionButton 
-                                                                    variant="secondary" 
+                                                                <ActionButton
+                                                                    variant="secondary"
                                                                     size="sm"
                                                                     onClick={() => handleEdit(category._id)}
                                                                 >
                                                                     <Edit className="w-4 h-4" />
                                                                     Sửa
                                                                 </ActionButton>
-                                                                <ActionButton 
-                                                                    variant="danger" 
+                                                                <ActionButton
+                                                                    variant="danger"
                                                                     size="sm"
                                                                     onClick={() => handleDelete(category._id)}
                                                                 >

@@ -1,218 +1,312 @@
 "use client";
-import React, { useState } from "react";
-import { Edit, Trash2, Plus, Search, Filter, Mail, Phone, Shield, User } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+    Edit,
+    Trash2,
+    Plus,
+    Search,
+    Filter,
+    Mail,
+    Shield,
+    User as UserIcon,
+    LogIn,
+    AlertTriangle,
+    RefreshCw,
+} from "lucide-react";
 
-// Mock data người dùng
-const users = [
-    {
-        id: 1,
-        avatar: "https://via.placeholder.com/60x60/3B82F6/FFFFFF?text=AN",
-        name: "Nguyễn Văn An",
-        email: "nguyenvana@email.com",
-        phone: "0901234567",
-        role: "Admin",
-        department: "IT",
-        joinDate: "2023-01-15",
-        active: true,
-    },
-    {
-        id: 2,
-        avatar: "https://via.placeholder.com/60x60/10B981/FFFFFF?text=BL",
-        name: "Trần Thị Bình",
-        email: "tranthib@email.com",
-        phone: "0912345678",
-        role: "Manager",
-        department: "Sales",
-        joinDate: "2023-03-22",
-        active: true,
-    },
-    {
-        id: 3,
-        avatar: "https://via.placeholder.com/60x60/F59E0B/FFFFFF?text=CD",
-        name: "Lê Minh Cường",
-        email: "leminhc@email.com",
-        phone: "0923456789",
-        role: "Employee",
-        department: "Marketing",
-        joinDate: "2023-05-10",
-        active: false,
-    },
-    {
-        id: 4,
-        avatar: "https://via.placeholder.com/60x60/EF4444/FFFFFF?text=DH",
-        name: "Phạm Thu Hương",
-        email: "phamthuh@email.com",
-        phone: "0934567890",
-        role: "Manager",
-        department: "HR",
-        joinDate: "2023-02-08",
-        active: true,
-    },
-    {
-        id: 5,
-        avatar: "https://via.placeholder.com/60x60/8B5CF6/FFFFFF?text=EK",
-        name: "Võ Đình Khang",
-        email: "vodinhk@email.com",
-        phone: "0945678901",
-        role: "Employee",
-        department: "Finance",
-        joinDate: "2023-06-18",
-        active: true,
-    },
-];
+// ==========================
+// Types
+// ==========================
+interface RawUser {
+    _id: string;
+    email: string | null;
+    password?: string | null; // sẽ không hiển thị
+    fullName: string | null;
+    role: "admin" | "user" | null;
+    isActive: boolean | null;
+    googleId: string | null;
+    avatar: string | null;
+    lastLoginAt: string | null; // ISO
+    lastLoginMethod: "google" | "local" | null;
+    createdAt: string | null; // ISO
+    updatedAt: string | null; // ISO
+}
 
-export default function UserManagement() {
-    const [search, setSearch] = useState("");
-    const [viewMode, setViewMode] = useState("table");
-    const [userList, setUserList] = useState(users);
-    
-    const filtered = userList.filter(
-        (user) =>
-            user.name.toLowerCase().includes(search.toLowerCase()) ||
-            user.email.toLowerCase().includes(search.toLowerCase()) ||
-            user.role.toLowerCase().includes(search.toLowerCase()) ||
-            user.department.toLowerCase().includes(search.toLowerCase())
-    );
+interface UiUser {
+    id: string;
+    name: string;
+    email: string;
+    avatar: string | null;
+    role: "admin" | "user" | "unknown";
+    activeState: "active" | "inactive" | "unknown"; // vì API có thể null
+    authProvider: "google" | "local" | "unknown";
+    lastLoginAt: string | null; // ISO
+    createdAt: string | null; // ISO
+}
 
-    const toggleActive = (userId) => {
-        setUserList(prev => prev.map(user => 
-            user.id === userId 
-                ? { ...user, active: !user.active }
-                : user
-        ));
+// ==========================
+// Helpers
+// ==========================
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3000";
+const ENDPOINT = `${API_BASE}/api/user/`;
+
+function normalize(u: RawUser): UiUser {
+    return {
+        id: u._id,
+        name: u.fullName?.trim() || "(Chưa cập nhật)",
+        email: u.email || "—",
+        avatar: u.avatar ?? null,
+        role: u.role ?? "unknown",
+        activeState:
+            u.isActive === true ? "active" : u.isActive === false ? "inactive" : "unknown",
+        authProvider: u.lastLoginMethod ?? (u.googleId ? "google" : "unknown"),
+        lastLoginAt: u.lastLoginAt,
+        createdAt: u.createdAt,
     };
+}
 
-    const ToggleSwitch = ({ isActive, onToggle, disabled = false }) => (
+function timeAgo(iso?: string | null) {
+    if (!iso) return "—";
+    const dt = new Date(iso);
+    if (isNaN(dt.getTime())) return "—";
+    const diff = Date.now() - dt.getTime();
+    const minutes = Math.floor(diff / (1000 * 60));
+    if (minutes < 1) return "vừa xong";
+    if (minutes < 60) return `${minutes} phút trước`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} giờ trước`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days} ngày trước`;
+    return dt.toLocaleString("vi-VN");
+}
+
+function classNames(...xs: Array<string | false | undefined>) {
+    return xs.filter(Boolean).join(" ");
+}
+
+// ==========================
+// Components nhỏ
+// ==========================
+function ActionButton({
+    onClick,
+    variant = "primary",
+    size = "sm",
+    children,
+    disabled = false,
+}: {
+    onClick?: () => void;
+    variant?: "primary" | "success" | "danger" | "secondary" | "outline";
+    size?: "sm" | "md" | "lg";
+    children: React.ReactNode;
+    disabled?: boolean;
+}) {
+    const base =
+        "inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed";
+    const variants: Record<string, string> = {
+        primary:
+            "bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500 shadow-sm hover:shadow-md",
+        success:
+            "bg-green-600 hover:bg-green-700 text-white focus:ring-green-500 shadow-sm hover:shadow-md",
+        danger:
+            "bg-red-600 hover:bg-red-700 text-white focus:ring-red-500 shadow-sm hover:shadow-md",
+        secondary:
+            "bg-gray-100 hover:bg-gray-200 text-gray-700 focus:ring-gray-500 border border-gray-300",
+        outline:
+            "border-2 border-gray-300 hover:border-gray-400 text-gray-700 hover:bg-gray-50 focus:ring-gray-500",
+    };
+    const sizes: Record<string, string> = {
+        sm: "px-3 py-2 text-sm",
+        md: "px-4 py-2.5 text-sm",
+        lg: "px-6 py-3 text-base",
+    };
+    return (
         <button
-            onClick={onToggle}
+            onClick={onClick}
             disabled={disabled}
-            className={`
-                relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
-                ${isActive ? 'bg-green-500' : 'bg-gray-300'}
-                ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-            `}
+            className={`${base} ${variants[variant]} ${sizes[size]}`}
         >
-            <span
-                className={`
-                    inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ease-in-out
-                    ${isActive ? 'translate-x-6' : 'translate-x-1'}
-                `}
-            />
+            {children}
         </button>
     );
+}
 
-    const ActionButton = ({ onClick, variant = "primary", size = "sm", children, disabled = false }) => {
-        const baseClasses = "inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed";
-        
-        const variants = {
-            primary: "bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500 shadow-sm hover:shadow-md",
-            success: "bg-green-600 hover:bg-green-700 text-white focus:ring-green-500 shadow-sm hover:shadow-md",
-            danger: "bg-red-600 hover:bg-red-700 text-white focus:ring-red-500 shadow-sm hover:shadow-md",
-            secondary: "bg-gray-100 hover:bg-gray-200 text-gray-700 focus:ring-gray-500 border border-gray-300",
-            outline: "border-2 border-gray-300 hover:border-gray-400 text-gray-700 hover:bg-gray-50 focus:ring-gray-500"
-        };
-        
-        const sizes = {
-            sm: "px-3 py-2 text-sm",
-            md: "px-4 py-2.5 text-sm",
-            lg: "px-6 py-3 text-base"
-        };
-        
-        return (
-            <button
-                onClick={onClick}
-                disabled={disabled}
-                className={`${baseClasses} ${variants[variant]} ${sizes[size]}`}
-            >
-                {children}
-            </button>
-        );
+function RoleBadge({ role }: { role: UiUser["role"] }) {
+    const map: Record<UiUser["role"], { wrap: string; label: string; Icon: any }> = {
+        admin: {
+            wrap: "bg-purple-100 text-purple-700 border-purple-200",
+            label: "Admin",
+            Icon: Shield,
+        },
+        user: {
+            wrap: "bg-blue-100 text-blue-700 border-blue-200",
+            label: "User",
+            Icon: UserIcon,
+        },
+        unknown: {
+            wrap: "bg-gray-100 text-gray-700 border-gray-200",
+            label: "—",
+            Icon: UserIcon,
+        },
     };
+    const { wrap, label, Icon } = map[role];
+    return (
+        <span
+            className={classNames(
+                "inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium border",
+                wrap
+            )}
+        >
+            <Icon className="w-3 h-3" />
+            {label}
+        </span>
+    );
+}
 
-    const getRoleBadge = (role) => {
-        const roleStyles = {
-            Admin: "bg-purple-100 text-purple-700 border-purple-200",
-            Manager: "bg-blue-100 text-blue-700 border-blue-200", 
-            Employee: "bg-green-100 text-green-700 border-green-200"
-        };
-        
-        const roleIcons = {
-            Admin: Shield,
-            Manager: User,
-            Employee: User
-        };
-        
-        const Icon = roleIcons[role] || User;
-        
+function ProviderBadge({ provider }: { provider: UiUser["authProvider"] }) {
+    const label = provider === "google" ? "Google" : provider === "local" ? "Local" : "—";
+    return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border bg-gray-50 text-gray-700 border-gray-200">
+            <LogIn className="w-3 h-3" />
+            {label}
+        </span>
+    );
+}
+
+function StatusPill({ state }: { state: UiUser["activeState"] }) {
+    if (state === "active")
         return (
-            <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium border ${roleStyles[role] || 'bg-gray-100 text-gray-700 border-gray-200'}`}>
-                <Icon className="w-3 h-3" />
-                {role}
+            <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-200">
+                Hoạt động
             </span>
         );
-    };
+    if (state === "inactive")
+        return (
+            <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 border border-gray-200">
+                Tạm dừng
+            </span>
+        );
+    return (
+        <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-200">
+            Không rõ
+        </span>
+    );
+}
 
-    const UserCard = ({ user }) => (
-        <div className={`bg-white rounded-lg shadow-sm border hover:shadow-md transition-shadow duration-200 overflow-hidden ${!user.active ? 'opacity-75' : ''}`}>
+function SkeletonRow() {
+    return (
+        <tr className="animate-pulse">
+            <td className="py-4 px-6">
+                <div className="space-y-2">
+                    <div className="h-3 w-28 bg-gray-200 rounded" />
+                    <div className="h-3 w-40 bg-gray-100 rounded" />
+                </div>
+            </td>
+            <td className="py-4 px-6">
+                <div className="h-3 w-40 bg-gray-200 rounded" />
+            </td>
+            <td className="py-4 px-6">
+                <div className="h-3 w-20 bg-gray-200 rounded" />
+            </td>
+            <td className="py-4 px-6">
+                <div className="h-3 w-24 bg-gray-200 rounded" />
+            </td>
+            <td className="py-4 px-6">
+                <div className="h-3 w-24 bg-gray-200 rounded" />
+            </td>
+            <td className="py-4 px-6">
+                <div className="h-8 w-28 bg-gray-200 rounded-full" />
+            </td>
+        </tr>
+    );
+}
+
+// ==========================
+// Main Component
+// ==========================
+export default function UserManagement() {
+    const [search, setSearch] = useState("");
+    const [viewMode, setViewMode] = useState<"table" | "card">("table");
+    const [list, setList] = useState<UiUser[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [roleFilter, setRoleFilter] = useState<"all" | UiUser["role"]>("all");
+    const [providerFilter, setProviderFilter] = useState<"all" | UiUser["authProvider"]>("all");
+
+    // Fetch
+    useEffect(() => {
+        let abort = false;
+        async function load() {
+            setLoading(true);
+            setError(null);
+            try {
+                const res = await fetch(ENDPOINT, { cache: "no-store" });
+                if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+                const data: RawUser[] = await res.json();
+                if (abort) return;
+                setList(data.map(normalize));
+            } catch (e: any) {
+                if (!abort) setError(e?.message || "Không thể tải dữ liệu");
+            } finally {
+                if (!abort) setLoading(false);
+            }
+        }
+        load();
+        return () => {
+            abort = true;
+        };
+    }, []);
+
+    // Derived list
+    const filtered = useMemo(() => {
+        const kw = search.trim().toLowerCase();
+        return list
+            .filter((u) => (roleFilter === "all" ? true : u.role === roleFilter))
+            .filter((u) => (providerFilter === "all" ? true : u.authProvider === providerFilter))
+            .filter((u) =>
+                kw
+                    ? (u.name + " " + u.email + " " + u.role + " " + u.authProvider)
+                        .toLowerCase()
+                        .includes(kw)
+                    : true
+            );
+    }, [list, roleFilter, providerFilter, search]);
+
+    // UI sub-components
+    const UserCard = ({ user }: { user: UiUser }) => (
+        <div
+            className={
+                classNames(
+                    "bg-white rounded-2xl shadow-sm border transition-shadow duration-200 overflow-hidden",
+                    user.activeState !== "active" && "opacity-80"
+                )
+            }
+        >
             <div className="p-4">
-                <div className="flex items-start gap-3 mb-4">
-                    <img 
-                        src={user.avatar} 
-                        alt={user.name} 
-                        className="w-16 h-16 rounded-full object-cover flex-shrink-0"
-                    />
+                <div className="mb-4">
                     <div className="flex-1 min-w-0">
                         <h3 className="font-semibold text-gray-900 truncate mb-1">{user.name}</h3>
                         <div className="flex items-center gap-1 text-sm text-gray-600 mb-1">
                             <Mail className="w-3 h-3" />
                             <span className="truncate">{user.email}</span>
                         </div>
-                        <div className="flex items-center gap-1 text-sm text-gray-600">
-                            <Phone className="w-3 h-3" />
-                            <span>{user.phone}</span>
+                        <div className="flex items-center gap-2 mt-1">
+                            <RoleBadge role={user.role} />
+                            <ProviderBadge provider={user.authProvider} />
                         </div>
                     </div>
                 </div>
-                
-                <div className="flex flex-wrap gap-2 mb-3">
-                    {getRoleBadge(user.role)}
-                    <span className="px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-sm">
-                        {user.department}
-                    </span>
+
+                <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
+                    <div>Lần đăng nhập gần nhất: {timeAgo(user.lastLoginAt)}</div>
+                    <StatusPill state={user.activeState} />
                 </div>
-                
-                <div className="flex items-center justify-between mb-4">
-                    <div className="text-sm text-gray-500">
-                        Tham gia: {new Date(user.joinDate).toLocaleDateString('vi-VN')}
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-500">Trạng thái:</span>
-                        <ToggleSwitch 
-                            isActive={user.active}
-                            onToggle={() => toggleActive(user.id)}
-                        />
-                        <span className={`text-xs font-medium ${user.active ? 'text-green-600' : 'text-gray-500'}`}>
-                            {user.active ? 'Hoạt động' : 'Tạm dừng'}
-                        </span>
-                    </div>
-                </div>
-                
+
                 <div className="flex gap-2">
-                    <ActionButton 
-                        variant="secondary" 
-                        size="sm"
-                        onClick={() => console.log('Edit user:', user.id)}
-                    >
-                        <Edit className="w-4 h-4" />
-                        Sửa
+                    <ActionButton variant="secondary" size="sm" onClick={() => console.log("Edit", user.id)}>
+                        <Edit className="w-4 h-4" /> Sửa
                     </ActionButton>
-                    <ActionButton 
-                        variant="danger" 
-                        size="sm"
-                        onClick={() => console.log('Delete user:', user.id)}
-                    >
-                        <Trash2 className="w-4 h-4" />
-                        Xóa
+                    <ActionButton variant="danger" size="sm" onClick={() => console.log("Delete", user.id)}>
+                        <Trash2 className="w-4 h-4" /> Xóa
                     </ActionButton>
                 </div>
             </div>
@@ -226,102 +320,165 @@ export default function UserManagement() {
                 <div className="mb-8">
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
                         <div>
-                            <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-2">
-                                Quản Lý Người Dùng
-                            </h1>
-                            <p className="text-gray-600">
-                                Quản lý thông tin và quyền hạn của người dùng trong hệ thống
-                            </p>
+                            <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-2">Quản Lý Người Dùng</h1>
                         </div>
-                        <ActionButton
-                            variant="success"
-                            size="lg"
-                            onClick={() => console.log('Add new user')}
-                        >
-                            <Plus className="w-5 h-5" />
-                            Thêm người dùng
+                        <ActionButton variant="success" size="lg" onClick={() => console.log("Add new user")}>
+                            <Plus className="w-5 h-5" /> Thêm người dùng
                         </ActionButton>
                     </div>
 
-                    {/* Search and Filters */}
-                    <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center">
-                        <div className="relative flex-1 max-w-md">
+                    {/* Controls */}
+                    <div className="flex flex-col lg:flex-row gap-3 lg:items-center">
+                        <div className="relative flex-1 max-w-xl">
                             <input
-                                className="w-full border border-gray-300 rounded-lg pl-10 pr-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                                placeholder="Tìm kiếm người dùng, email, vai trò..."
+                                className="w-full border border-gray-300 rounded-lg pl-10 pr-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-900"
+                                placeholder="Tìm tên, email, vai trò, phương thức đăng nhập..."
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                             />
                             <Search className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" />
                         </div>
-                        
                         <div className="flex gap-2">
                             <ActionButton
                                 variant="outline"
                                 size="md"
-                                onClick={() => console.log('Filter users')}
+                                onClick={() => {
+                                    setRoleFilter("all");
+                                    setProviderFilter("all");
+                                    setSearch("");
+                                }}
                             >
                                 <Filter className="w-4 h-4" />
-                                <span className="hidden sm:inline">Lọc</span>
+                                <span className="hidden sm:inline">Xóa lọc</span>
                             </ActionButton>
-                            
-                            {/* View Mode Toggle */}
+                            {/* View mode */}
                             <div className="hidden md:flex bg-gray-100 rounded-lg p-1">
                                 <button
                                     onClick={() => setViewMode("table")}
-                                    className={`px-3 py-2 text-sm rounded-md transition-colors ${
-                                        viewMode === "table" 
-                                            ? "bg-white text-gray-900 shadow-sm" 
+                                    className={classNames(
+                                        "px-3 py-2 text-sm rounded-md transition-colors",
+                                        viewMode === "table"
+                                            ? "bg-white text-gray-900 shadow-sm"
                                             : "text-gray-600 hover:text-gray-900"
-                                    }`}
+                                    )}
                                 >
                                     Bảng
                                 </button>
                                 <button
                                     onClick={() => setViewMode("card")}
-                                    className={`px-3 py-2 text-sm rounded-md transition-colors ${
-                                        viewMode === "card" 
-                                            ? "bg-white text-gray-900 shadow-sm" 
+                                    className={classNames(
+                                        "px-3 py-2 text-sm rounded-md transition-colors",
+                                        viewMode === "card"
+                                            ? "bg-white text-gray-900 shadow-sm"
                                             : "text-gray-600 hover:text-gray-900"
-                                    }`}
+                                    )}
                                 >
                                     Thẻ
                                 </button>
                             </div>
                         </div>
                     </div>
+
+                    {/* Quick filters */}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                        <select
+                            className="px-3 py-2 text-sm border rounded-lg bg-white text-gray-900"
+                            value={roleFilter}
+                            onChange={(e) => setRoleFilter(e.target.value as any)}
+                        >
+                            <option value="all">Tất cả vai trò</option>
+                            <option value="admin">Admin</option>
+                            <option value="user">User</option>
+                            <option value="unknown">Không rõ</option>
+                        </select>
+                        <select
+                            className="px-3 py-2 text-sm border rounded-lg bg-white text-gray-900"
+                            value={providerFilter}
+                            onChange={(e) => setProviderFilter(e.target.value as any)}
+                        >
+                            <option value="all">Mọi phương thức đăng nhập</option>
+                            <option value="google">Google</option>
+                            <option value="local">Local</option>
+                            <option value="unknown">Không rõ</option>
+                        </select>
+                        <button
+                            onClick={() => {
+                                setLoading(true);
+                                fetch(ENDPOINT, { cache: "no-store" })
+                                    .then((r) => r.json())
+                                    .then((data: RawUser[]) => setList(data.map(normalize)))
+                                    .catch((e) => setError(e?.message || "Không thể tải dữ liệu"))
+                                    .finally(() => setLoading(false));
+                            }}
+                            className="inline-flex items-center gap-2 px-3 py-2 text-sm border rounded-lg bg-white hover:bg-gray-50"
+                        >
+                            <RefreshCw className="w-4 h-4" /> Tải lại
+                        </button>
+                    </div>
                 </div>
 
+                {/* Error state */}
+                {error && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 mb-6 flex items-start gap-3">
+                        <AlertTriangle className="w-5 h-5 mt-0.5" />
+                        <div>
+                            <div className="font-semibold">Không tải được danh sách người dùng</div>
+                            <div className="text-sm">{error}</div>
+                            <div className="text-sm text-red-600/80 mt-1">
+                                Hãy kiểm tra API tại <code className="bg-red-100 px-1 rounded">{ENDPOINT}</code>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Content */}
-                {filtered.length === 0 ? (
+                {loading ? (
+                    <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <table className="w-full">
+                                <thead className="bg-gray-50 border-b">
+                                    <tr>
+                                        <th className="text-left py-4 px-6 font-medium text-gray-900">Người dùng</th>
+                                        <th className="text-left py-4 px-6 font-medium text-gray-900">Email</th>
+                                        <th className="text-left py-4 px-6 font-medium text-gray-900">Vai trò</th>
+                                        <th className="text-left py-4 px-6 font-medium text-gray-900">Phương thức</th>
+                                        <th className="text-left py-4 px-6 font-medium text-gray-900">Đăng nhập gần nhất</th>
+                                        <th className="text-left py-4 px-6 font-medium text-gray-900">Trạng thái</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200">
+                                    {Array.from({ length: 5 }).map((_, i) => (
+                                        <SkeletonRow key={i} />
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                ) : filtered.length === 0 ? (
                     <div className="bg-white rounded-lg shadow-sm border p-12 text-center">
                         <div className="text-gray-400 mb-4">
-                            <User className="w-12 h-12 mx-auto mb-4" />
+                            <UserIcon className="w-12 h-12 mx-auto mb-4" />
                         </div>
-                        <h3 className="text-lg font-medium text-gray-900 mb-2">
-                            Không tìm thấy người dùng
-                        </h3>
+                        <h3 className="text-lg font-medium text-gray-900 mb-2">Không tìm thấy người dùng</h3>
                         <p className="text-gray-500">
-                            Thử thay đổi từ khóa tìm kiếm hoặc xóa bộ lọc
+                            Thử thay đổi từ khóa tìm kiếm, vai trò hoặc phương thức đăng nhập
                         </p>
                     </div>
                 ) : (
                     <>
-                        {/* Mobile/Tablet Card View */}
-                        <div className="md:hidden">
-                            <div className="grid gap-4">
-                                {filtered.map((user) => (
-                                    <UserCard key={user.id} user={user} />
-                                ))}
-                            </div>
+                        {/* Mobile Cards */}
+                        <div className="md:hidden grid gap-4">
+                            {filtered.map((u) => (
+                                <UserCard key={u.id} user={u} />
+                            ))}
                         </div>
 
-                        {/* Desktop Table/Card View */}
+                        {/* Desktop */}
                         <div className="hidden md:block">
                             {viewMode === "card" ? (
                                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                                    {filtered.map((user) => (
-                                        <UserCard key={user.id} user={user} />
+                                    {filtered.map((u) => (
+                                        <UserCard key={u.id} user={u} />
                                     ))}
                                 </div>
                             ) : (
@@ -331,80 +488,54 @@ export default function UserManagement() {
                                             <thead className="bg-gray-50 border-b">
                                                 <tr>
                                                     <th className="text-left py-4 px-6 font-medium text-gray-900">Người dùng</th>
-                                                    <th className="text-left py-4 px-6 font-medium text-gray-900">Liên hệ</th>
+                                                    <th className="text-left py-4 px-6 font-medium text-gray-900">Email</th>
                                                     <th className="text-left py-4 px-6 font-medium text-gray-900">Vai trò</th>
-                                                    <th className="text-left py-4 px-6 font-medium text-gray-900">Phòng ban</th>
-                                                    <th className="text-left py-4 px-6 font-medium text-gray-900">Ngày tham gia</th>
+                                                    <th className="text-left py-4 px-6 font-medium text-gray-900">Phương thức</th>
+                                                    <th className="text-left py-4 px-6 font-medium text-gray-900">Đăng nhập gần nhất</th>
                                                     <th className="text-left py-4 px-6 font-medium text-gray-900">Trạng thái</th>
                                                     <th className="text-left py-4 px-6 font-medium text-gray-900">Thao tác</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-gray-200">
-                                                {filtered.map((user) => (
-                                                    <tr key={user.id} className={`hover:bg-gray-50 transition-colors ${!user.active ? 'opacity-60' : ''}`}>
+                                                {filtered.map((u) => (
+                                                    <tr
+                                                        key={u.id}
+                                                        className={
+                                                            classNames(
+                                                                "hover:bg-gray-50 transition-colors",
+                                                                u.activeState !== "active" && "opacity-80"
+                                                            )
+                                                        }
+                                                    >
                                                         <td className="py-4 px-6">
-                                                            <div className="flex items-center gap-3">
-                                                                <img 
-                                                                    src={user.avatar} 
-                                                                    alt={user.name} 
-                                                                    className="w-10 h-10 rounded-full object-cover"
-                                                                />
-                                                                <div>
-                                                                    <div className="font-medium text-gray-900">{user.name}</div>
-                                                                </div>
-                                                            </div>
+                                                            <div className="font-medium text-gray-900">{u.name}</div>
+                                                        </td>
+                                                        <td className="py-4 px-6 text-sm text-gray-700">{u.email}</td>
+                                                        <td className="py-4 px-6">
+                                                            <RoleBadge role={u.role} />
                                                         </td>
                                                         <td className="py-4 px-6">
-                                                            <div className="text-sm">
-                                                                <div className="flex items-center gap-1 text-gray-900 mb-1">
-                                                                    <Mail className="w-3 h-3" />
-                                                                    {user.email}
-                                                                </div>
-                                                                <div className="flex items-center gap-1 text-gray-500">
-                                                                    <Phone className="w-3 h-3" />
-                                                                    {user.phone}
-                                                                </div>
-                                                            </div>
+                                                            <ProviderBadge provider={u.authProvider} />
                                                         </td>
+                                                        <td className="py-4 px-6 text-sm text-gray-600">{timeAgo(u.lastLoginAt)}</td>
                                                         <td className="py-4 px-6">
-                                                            {getRoleBadge(user.role)}
-                                                        </td>
-                                                        <td className="py-4 px-6">
-                                                            <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">
-                                                                {user.department}
-                                                            </span>
-                                                        </td>
-                                                        <td className="py-4 px-6 text-sm text-gray-600">
-                                                            {new Date(user.joinDate).toLocaleDateString('vi-VN')}
-                                                        </td>
-                                                        <td className="py-4 px-6">
-                                                            <div className="flex items-center gap-3">
-                                                                <ToggleSwitch 
-                                                                    isActive={user.active}
-                                                                    onToggle={() => toggleActive(user.id)}
-                                                                />
-                                                                <span className={`text-sm font-medium ${user.active ? 'text-green-600' : 'text-gray-500'}`}>
-                                                                    {user.active ? 'Hoạt động' : 'Tạm dừng'}
-                                                                </span>
-                                                            </div>
+                                                            <StatusPill state={u.activeState} />
                                                         </td>
                                                         <td className="py-4 px-6">
                                                             <div className="flex gap-2">
-                                                                <ActionButton 
-                                                                    variant="secondary" 
+                                                                <ActionButton
+                                                                    variant="secondary"
                                                                     size="sm"
-                                                                    onClick={() => console.log('Edit user:', user.id)}
+                                                                    onClick={() => console.log("Edit", u.id)}
                                                                 >
-                                                                    <Edit className="w-4 h-4" />
-                                                                    Sửa
+                                                                    <Edit className="w-4 h-4" /> Sửa
                                                                 </ActionButton>
-                                                                <ActionButton 
-                                                                    variant="danger" 
+                                                                <ActionButton
+                                                                    variant="danger"
                                                                     size="sm"
-                                                                    onClick={() => console.log('Delete user:', user.id)}
+                                                                    onClick={() => console.log("Delete", u.id)}
                                                                 >
-                                                                    <Trash2 className="w-4 h-4" />
-                                                                    Xóa
+                                                                    <Trash2 className="w-4 h-4" /> Xóa
                                                                 </ActionButton>
                                                             </div>
                                                         </td>
@@ -419,11 +550,10 @@ export default function UserManagement() {
                     </>
                 )}
 
-                {/* Results Summary */}
-                {filtered.length > 0 && (
+                {/* Footer summary */}
+                {!loading && (
                     <div className="mt-6 text-center text-sm text-gray-500">
-                        Hiển thị {filtered.length} người dùng
-                        {search && ` cho "${search}"`}
+                        Hiển thị {filtered.length} người dùng{search ? ` cho "${search}"` : ""}
                     </div>
                 )}
             </div>

@@ -1,9 +1,12 @@
+
 @import "tailwindcss";
+
 
 :root {
   --background: #ffffff;
   --foreground: #171717;
 }
+
 
 @theme inline {
   --color-background: var(--background);
@@ -24,3 +27,9 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+/* globals.css */
+select, select option {
+  color: #111827 !important; /* text-gray-900 */
+  background-color: #ffffff;
+}
+
