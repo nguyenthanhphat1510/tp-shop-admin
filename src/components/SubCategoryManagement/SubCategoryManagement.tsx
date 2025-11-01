@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { Edit, Trash2, Plus, Search, Filter, X, Folder } from "lucide-react";
+import { Edit, Trash2, Plus, Search, Filter, X, Folder, Eye } from "lucide-react";
 import { useRouter } from "next/navigation";
 import toast from 'react-hot-toast';
 
@@ -21,7 +21,7 @@ export default function SubCategoryManagement() {
         sortBy: "name",
     });
 
-    // ===== Pagination (giống Order) =====
+    // Pagination
     const PAGE_SIZES = [5];
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(PAGE_SIZES[0]);
@@ -68,7 +68,7 @@ export default function SubCategoryManagement() {
         fetchData();
     }, []);
 
-    // Filter (giữ nguyên logic)
+    // Filter
     const filtered = subCategoryList
         .filter((subCategory) => {
             const matchesSearch =
@@ -99,12 +99,12 @@ export default function SubCategoryManagement() {
             }
         });
 
-    // Reset page khi đổi filter/search (giống Order)
+    // Reset page khi đổi filter/search
     useEffect(() => {
         setPage(1);
     }, [search, filters]);
 
-    // Tính toán phân trang (giống Order)
+    // Pagination
     const totalItems = filtered.length;
     const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
     const safePage = Math.min(page, totalPages);
@@ -124,45 +124,160 @@ export default function SubCategoryManagement() {
         filters.category !== "" ||
         filters.sortBy !== "name";
 
-    // Toggle status (giữ nguyên logic)
-    const toggleActive = async (subCategoryId) => {
-        try {
-            const response = await fetch(`http://localhost:3000/api/subcategories/${subCategoryId}/toggle-status`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' }
-            });
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'Lỗi cập nhật trạng thái');
-            }
-            const result = await response.json();
+    // ✅ TOGGLE STATUS - CÓ CONFIRM
+    const toggleActive = async (subCategoryId, subCategoryName, currentStatus) => {
+        const action = currentStatus ? 'TẠM DỪNG' : 'KÍCH HOẠT';
+        const newStatusText = currentStatus ? 'Tạm dừng' : 'Hoạt động';
+        const currentStatusText = currentStatus ? 'Hoạt động' : 'Tạm dừng';
 
-            setSubCategoryList(prev =>
-                prev.map(sc =>
+        if (confirm(
+            `⚠️ ${action} danh mục con "${subCategoryName}"?\n\n` +
+            `Trạng thái sẽ chuyển từ "${currentStatusText}" sang "${newStatusText}"\n\n` +
+            `Bạn có chắc chắn?`
+        )) {
+            try {
+                console.log(`🔄 Toggling status for subcategory: ${subCategoryId}`);
+
+                const response = await fetch(`http://localhost:3000/api/subcategories/${subCategoryId}/toggle-status`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                console.log('Response status:', response.status);
+
+                // ✅ PARSE JSON AN TOÀN
+                const responseText = await response.text();
+                console.log('Response text:', responseText);
+
+                let result;
+                try {
+                    result = responseText ? JSON.parse(responseText) : {};
+                } catch (jsonError) {
+                    console.error('JSON parse error:', jsonError);
+                    result = { message: responseText || 'Phản hồi không hợp lệ' };
+                }
+
+                if (!response.ok) {
+                    throw new Error(result.message || `HTTP error! status: ${response.status}`);
+                }
+
+                console.log('✅ Toggle response:', result);
+
+                const newStatus = result.isActive === "true" || result.isActive === true;
+
+                // ✅ CẬP NHẬT STATE
+                setSubCategoryList(prev => prev.map(sc =>
                     sc._id === subCategoryId
-                        ? { ...sc, active: result.isActive === "true" || result.isActive === true }
+                        ? { ...sc, active: newStatus }
                         : sc
-                )
-            );
+                ));
 
-            if (result.isActive === "true" || result.isActive === true) {
-                toast.success('Danh mục con đã được kích hoạt', { duration: 2000, icon: '✅' });
-            } else {
-                toast('Danh mục con đã được tạm dừng', {
-                    icon: '⚠️',
-                    style: { borderRadius: '10px', background: '#F59E0B', color: '#fff', fontWeight: 'bold' },
-                    duration: 3000
-                });
+                // ✅ TOAST SUCCESS
+                if (newStatus) {
+                    toast.success(`✅ Đã kích hoạt: ${subCategoryName}`, {
+                        duration: 3000,
+                        style: { background: '#10B981', color: '#fff', fontWeight: 'bold' }
+                    });
+                } else {
+                    toast.success(`⏸️ Đã tạm dừng: ${subCategoryName}`, {
+                        duration: 3000,
+                        style: { background: '#F59E0B', color: '#fff', fontWeight: 'bold' }
+                    });
+                }
+
+            } catch (error) {
+                console.error('❌ Error updating subcategory status:', error);
+
+                // ✅ HIỂN THỊ LỖI RÀNG BUỘC
+                if (error.message.includes('sản phẩm đang hoạt động')) {
+                    toast.error(error.message, {
+                        duration: 6000,
+                        style: { 
+                            borderRadius: '10px', 
+                            background: '#EF4444', 
+                            color: '#fff', 
+                            fontWeight: 'bold', 
+                            maxWidth: '500px' 
+                        },
+                        icon: '🚫',
+                    });
+                } else {
+                    toast.error(`❌ Lỗi: ${error.message}`, { duration: 3000 });
+                }
             }
-        } catch (error) {
-            if (error.message.includes('sản phẩm đang hoạt động')) {
-                toast.error(error.message, {
-                    duration: 5000,
-                    style: { borderRadius: '10px', background: '#EF4444', color: '#fff', fontWeight: 'bold', maxWidth: '500px' },
-                    icon: '🚫',
+        }
+    };
+
+    // ✅ HARD DELETE - CÓ CONFIRM
+    const handleDelete = async (subCategoryId, subCategoryName) => {
+        if (confirm(
+            `🗑️ XÓA VĨNH VIỄN danh mục con "${subCategoryName}"?\n\n` +
+            `⚠️ CẢNH BÁO:\n` +
+            `- Danh mục con sẽ bị xóa VĨNH VIỄN khỏi database\n` +
+            `- KHÔNG THỂ KHÔI PHỤC\n` +
+            `- Chỉ xóa được khi KHÔNG CÒN sản phẩm nào\n\n` +
+            `Bạn có chắc chắn?`
+        )) {
+            try {
+                console.log(`🗑️ Hard deleting subcategory: ${subCategoryId}`);
+
+                const response = await fetch(`http://localhost:3000/api/subcategories/${subCategoryId}`, {
+                    method: 'DELETE'
                 });
-            } else {
-                toast.error(`Lỗi: ${error.message}`, { duration: 3000 });
+
+                console.log('Response status:', response.status);
+
+                // ✅ PARSE JSON AN TOÀN
+                const responseText = await response.text();
+                console.log('Response text:', responseText);
+
+                let result;
+                try {
+                    result = responseText ? JSON.parse(responseText) : {};
+                } catch (jsonError) {
+                    console.error('JSON parse error:', jsonError);
+                    result = { message: responseText || 'Phản hồi không hợp lệ' };
+                }
+
+                if (!response.ok) {
+                    throw new Error(result.message || `HTTP error! status: ${response.status}`);
+                }
+
+                // ✅ XÓA KHỎI LIST
+                setSubCategoryList(prev => prev.filter(sc => sc._id !== subCategoryId));
+
+                // ✅ TOAST SUCCESS
+                toast.success(
+                    result.message || `Đã xóa vĩnh viễn danh mục con "${subCategoryName}" khỏi hệ thống`,
+                    {
+                        duration: 5000,
+                        style: { background: '#DC2626', color: '#fff', fontWeight: 'bold' }
+                    }
+                );
+
+            } catch (error) {
+                console.error('❌ Error deleting subcategory:', error);
+
+                // ✅ HIỂN THỊ LỖI RÀNG BUỘC
+                if (error.message.includes('sản phẩm')) {
+                    toast.error(error.message, {
+                        duration: 6000,
+                        style: { 
+                            borderRadius: '10px', 
+                            background: '#EF4444', 
+                            color: '#fff', 
+                            fontWeight: 'bold', 
+                            maxWidth: '500px',
+                            padding: '16px'
+                        },
+                        icon: '🚫',
+                    });
+                } else {
+                    toast.error(`❌ Lỗi: ${error.message}`, {
+                        duration: 4000,
+                        style: { borderRadius: '10px', background: '#EF4444', color: '#fff', fontWeight: 'bold' }
+                    });
+                }
             }
         }
     };
@@ -172,16 +287,16 @@ export default function SubCategoryManagement() {
             onClick={onToggle}
             disabled={disabled}
             className={`
-        relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
-        ${isActive ? 'bg-green-500' : 'bg-gray-300'}
-        ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-      `}
+                relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+                ${isActive ? 'bg-green-500' : 'bg-gray-300'}
+                ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+            `}
         >
             <span
                 className={`
-          inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ease-in-out
-          ${isActive ? 'translate-x-6' : 'translate-x-1'}
-        `}
+                    inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ease-in-out
+                    ${isActive ? 'translate-x-6' : 'translate-x-1'}
+                `}
             />
         </button>
     );
@@ -195,7 +310,8 @@ export default function SubCategoryManagement() {
             success: "bg-green-600 hover:bg-green-700 text-white focus:ring-green-500 shadow-sm hover:shadow-md",
             danger: "bg-red-600 hover:bg-red-700 text-white focus:ring-red-500 shadow-sm hover:shadow-md",
             secondary: "bg-gray-100 hover:bg-gray-200 text-gray-700 focus:ring-gray-500 border border-gray-300",
-            outline: "border-2 border-gray-300 hover:border-gray-400 text-gray-700 hover:bg-gray-50 focus:ring-gray-500"
+            outline: "border-2 border-gray-300 hover:border-gray-400 text-gray-700 hover:bg-gray-50 focus:ring-gray-500",
+            warning: "bg-orange-400 hover:bg-orange-500 text-white focus:ring-orange-400 shadow-sm hover:shadow-md"
         };
 
         const sizes = {
@@ -227,7 +343,10 @@ export default function SubCategoryManagement() {
                     </p>
                     <div className="flex items-center justify-center gap-2 mb-3">
                         <span className="text-sm text-gray-700">Trạng thái:</span>
-                        <ToggleSwitch isActive={subCategory.active} onToggle={() => toggleActive(subCategory._id)} />
+                        <ToggleSwitch 
+                            isActive={subCategory.active} 
+                            onToggle={() => toggleActive(subCategory._id, subCategory.name, subCategory.active)} 
+                        />
                         <span className={`text-sm font-medium ${subCategory.active ? 'text-green-600' : 'text-gray-500'}`}>
                             {subCategory.active ? 'Hoạt động' : 'Tạm dừng'}
                         </span>
@@ -244,11 +363,27 @@ export default function SubCategoryManagement() {
                 </div>
 
                 <div className="flex gap-2">
-                    <ActionButton variant="secondary" size="sm" onClick={() => handleEdit(subCategory._id)}>
+                    <ActionButton 
+                        variant="warning" 
+                        size="sm" 
+                        onClick={() => router.push(`/subcategories/${subCategory._id}`)}
+                    >
+                        <Eye className="w-4 h-4" />
+                        Xem
+                    </ActionButton>
+                    <ActionButton 
+                        variant="secondary" 
+                        size="sm" 
+                        onClick={() => handleEdit(subCategory._id)}
+                    >
                         <Edit className="w-4 h-4" />
                         Sửa
                     </ActionButton>
-                    <ActionButton variant="danger" size="sm" onClick={() => handleDelete(subCategory._id)}>
+                    <ActionButton 
+                        variant="danger" 
+                        size="sm" 
+                        onClick={() => handleDelete(subCategory._id, subCategory.name)}
+                    >
                         <Trash2 className="w-4 h-4" />
                         Xóa
                     </ActionButton>
@@ -291,114 +426,121 @@ export default function SubCategoryManagement() {
         router.push(`/subcategories/${subCategoryId}/edit`);
     };
 
-    const handleDelete = async (subCategoryId) => {
-        const subCategory = subCategoryList.find(sc => sc._id === subCategoryId);
-        const confirmMessage = `Bạn có chắc chắn muốn xóa danh mục con "${subCategory?.name || 'này'}"?\n\nDanh mục con sẽ được chuyển sang trạng thái tạm dừng và không thể khôi phục.`;
-
-        if (confirm(confirmMessage)) {
-            try {
-                const response = await fetch(`http://localhost:3000/api/subcategories/${subCategoryId}/soft-delete`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.message || 'Lỗi xóa danh mục con');
-                }
-                const result = await response.json();
-
-                setSubCategoryList(prev =>
-                    prev.map(sc =>
-                        sc._id === subCategoryId
-                            ? { ...sc, active: result.isActive === "true" || result.isActive === true }
-                            : sc
-                    )
-                );
-
-                toast.success(`Danh mục con "${subCategory?.name || ''}" đã được xóa thành công`, {
-                    icon: '✅',
-                    style: { borderRadius: '10px', background: '#10B981', color: '#fff', fontWeight: 'bold' },
-                    duration: 3000,
-                });
-            } catch (error) {
-                if (error.message.includes('sản phẩm đang hoạt động')) {
-                    toast.error(error.message, {
-                        duration: 6000,
-                        style: { borderRadius: '10px', background: '#EF4444', color: '#fff', fontWeight: 'bold', maxWidth: '500px', padding: '16px' },
-                        icon: '🚫',
-                    });
-                } else {
-                    toast.error(`Lỗi xóa danh mục con: ${error.message}`, {
-                        duration: 4000,
-                        style: { borderRadius: '10px', background: '#EF4444', color: '#fff', fontWeight: 'bold' },
-                    });
-                }
-            }
-        }
-    };
-
-    // ===== Pagination component (giống Order) =====
+    // Pagination Component
     const Pagination = () => {
         if (totalItems === 0) return null;
 
         const goTo = (p) => setPage(Math.max(1, Math.min(p, totalPages)));
 
-        const baseBtn = "px-3 md:px-4 py-2 text-sm md:text-base rounded-lg font-medium border-2 transition-colors";
-        const normalBtn = "bg-gray-100 border-gray-300 text-gray-900 hover:bg-blue-50 hover:border-blue-400";
-        const activeBtn = "bg-blue-600 border-blue-600 text-white hover:bg-blue-700";
-        const disabledBtn = "bg-gray-200 border-gray-300 text-gray-400 cursor-not-allowed";
+        const getPageNumbers = () => {
+            const pages = [];
+            const delta = 1;
 
-        const pages = [];
-        const windowSize = 1;
-        const add = (n) => { if (!pages.includes(n)) pages.push(n); };
+            pages.push(1);
 
-        add(1);
-        for (let i = safePage - windowSize; i <= safePage + windowSize; i++) {
-            if (i > 1 && i < totalPages) add(i);
-        }
-        if (totalPages > 1) add(totalPages);
-        pages.sort((a, b) => a - b);
+            for (let i = safePage - delta; i <= safePage + delta; i++) {
+                if (i > 1 && i < totalPages) {
+                    pages.push(i);
+                }
+            }
+
+            if (totalPages > 1) {
+                pages.push(totalPages);
+            }
+
+            return [...new Set(pages)].sort((a, b) => a - b);
+        };
+
+        const pageNumbers = getPageNumbers();
 
         return (
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mt-6">
-                <div className="text-sm text-gray-700">
-                    Hiển thị <span className="font-medium">{totalItems ? startIdx + 1 : 0}-{endIdx}</span> /{" "}
-                    <span className="font-medium">{totalItems}</span> danh mục con
-                </div>
-
-                <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-700">Mỗi trang</span>
-                    <select
-                        value={pageSize}
-                        onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
-                        className="border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+            <div className="flex items-center justify-between border-t-2 border-gray-300 bg-white px-4 py-3 sm:px-6 rounded-lg mt-6">
+                <div className="flex flex-1 justify-between sm:hidden">
+                    <button
+                        onClick={() => goTo(safePage - 1)}
+                        disabled={safePage === 1}
+                        className="relative inline-flex items-center rounded-md border-2 border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        {PAGE_SIZES.map((s) => (
-                            <option key={s} value={s}>{s}</option>
-                        ))}
-                    </select>
+                        Trước
+                    </button>
+                    <button
+                        onClick={() => goTo(safePage + 1)}
+                        disabled={safePage === totalPages}
+                        className="relative ml-3 inline-flex items-center rounded-md border-2 border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        Sau
+                    </button>
                 </div>
 
-                <div className="flex items-center gap-1">
-                    <button onClick={() => goTo(1)} disabled={safePage === 1} className={`${baseBtn} ${safePage === 1 ? disabledBtn : normalBtn}`} aria-label="Trang đầu">«</button>
-                    <button onClick={() => goTo(safePage - 1)} disabled={safePage === 1} className={`${baseBtn} ${safePage === 1 ? disabledBtn : normalBtn}`} aria-label="Trang trước">Trước</button>
+                <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+                    <div>
+                        <p className="text-sm text-gray-700">
+                            Hiển thị{' '}
+                            <span className="font-medium">{totalItems ? startIdx + 1 : 0}</span>
+                            {' '}-{' '}
+                            <span className="font-medium">{endIdx}</span>
+                            {' '}trong tổng số{' '}
+                            <span className="font-medium">{totalItems}</span>
+                            {' '}kết quả
+                        </p>
+                    </div>
 
-                    {pages.map((p, idx) => {
-                        const prev = pages[idx - 1];
-                        const showEllipsis = idx > 0 && p - (prev ?? 0) > 1;
-                        const isActive = p === safePage;
-                        return (
-                            <React.Fragment key={p}>
-                                {showEllipsis && <span className="px-2 text-gray-500">…</span>}
-                                <button onClick={() => goTo(p)} className={`${baseBtn} ${isActive ? activeBtn : normalBtn}`} aria-current={isActive ? "page" : undefined}>
-                                    {p}
-                                </button>
-                            </React.Fragment>
-                        );
-                    })}
+                    <div>
+                        <nav aria-label="Pagination" className="isolate inline-flex -space-x-px rounded-md shadow-sm">
+                            <button
+                                onClick={() => goTo(safePage - 1)}
+                                disabled={safePage === 1}
+                                className="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <span className="sr-only">Trang trước</span>
+                                <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                    <path fillRule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clipRule="evenodd" />
+                                </svg>
+                            </button>
 
-                    <button onClick={() => goTo(safePage + 1)} disabled={safePage === totalPages} className={`${baseBtn} ${safePage === totalPages ? disabledBtn : normalBtn}`} aria-label="Trang sau">Sau</button>
-                    <button onClick={() => goTo(totalPages)} disabled={safePage === totalPages} className={`${baseBtn} ${safePage === totalPages ? disabledBtn : normalBtn}`} aria-label="Trang cuối">»</button>
+                            {pageNumbers.map((pageNum, idx) => {
+                                const isActive = pageNum === safePage;
+                                const prevPage = pageNumbers[idx - 1];
+                                const showEllipsis = idx > 0 && pageNum - prevPage > 1;
+
+                                return (
+                                    <React.Fragment key={pageNum}>
+                                        {showEllipsis && (
+                                            <span className="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-700 ring-1 ring-inset ring-gray-300 focus:outline-offset-0">
+                                                ...
+                                            </span>
+                                        )}
+
+                                        <button
+                                            onClick={() => goTo(pageNum)}
+                                            aria-current={isActive ? "page" : undefined}
+                                            className={`
+                                                relative inline-flex items-center px-4 py-2 text-sm font-semibold
+                                                focus:z-20 focus:outline-offset-0
+                                                ${isActive
+                                                    ? 'z-10 bg-indigo-600 text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600'
+                                                    : 'text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50'
+                                                }
+                                            `}
+                                        >
+                                            {pageNum}
+                                        </button>
+                                    </React.Fragment>
+                                );
+                            })}
+
+                            <button
+                                onClick={() => goTo(safePage + 1)}
+                                disabled={safePage === totalPages}
+                                className="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <span className="sr-only">Trang sau</span>
+                                <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                    <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
+                                </svg>
+                            </button>
+                        </nav>
+                    </div>
                 </div>
             </div>
         );
@@ -416,7 +558,7 @@ export default function SubCategoryManagement() {
                         </div>
                         <button
                             onClick={() => router.push('/subcategories/add')}
-                            className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors shadow-sm"
+                            className="flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg font-medium transition-colors shadow-sm"
                         >
                             <Plus className="w-5 h-5" />
                             Thêm danh mục con
@@ -462,7 +604,6 @@ export default function SubCategoryManagement() {
                                 </button>
                             )}
 
-                            {/* View Mode Toggle */}
                             <div className="hidden md:flex bg-gray-100 rounded-lg p-1 border-2 border-gray-300">
                                 <button
                                     onClick={() => setViewMode("table")}
@@ -547,7 +688,6 @@ export default function SubCategoryManagement() {
                     </div>
                 ) : (
                     <>
-                        {/* Mobile/Tablet Card View */}
                         <div className="md:hidden">
                             <div className="grid gap-4">
                                 {paginated.map((subCategory) => (
@@ -556,7 +696,6 @@ export default function SubCategoryManagement() {
                             </div>
                         </div>
 
-                        {/* Desktop View */}
                         <div className="hidden md:block">
                             {viewMode === "card" ? (
                                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -593,7 +732,10 @@ export default function SubCategoryManagement() {
                                                         </td>
                                                         <td className="py-4 px-6 border-r border-gray-200">
                                                             <div className="flex items-center gap-3">
-                                                                <ToggleSwitch isActive={subCategory.active} onToggle={() => toggleActive(subCategory._id)} />
+                                                                <ToggleSwitch 
+                                                                    isActive={subCategory.active} 
+                                                                    onToggle={() => toggleActive(subCategory._id, subCategory.name, subCategory.active)} 
+                                                                />
                                                                 <span className={`text-sm font-medium ${subCategory.active ? 'text-green-600' : 'text-gray-500'}`}>
                                                                     {subCategory.active ? 'Hoạt động' : 'Tạm dừng'}
                                                                 </span>
@@ -606,11 +748,27 @@ export default function SubCategoryManagement() {
                                                         </td>
                                                         <td className="py-4 px-6">
                                                             <div className="flex gap-2">
-                                                                <ActionButton variant="secondary" size="sm" onClick={() => handleEdit(subCategory._id)}>
+                                                                <ActionButton 
+                                                                    variant="secondary" 
+                                                                    size="sm" 
+                                                                    onClick={() => router.push(`/subcategories/${subCategory._id}`)}
+                                                                >
+                                                                    <Eye className="w-4 h-4" />
+                                                                    Xem
+                                                                </ActionButton>
+                                                                <ActionButton 
+                                                                    variant="warning" 
+                                                                    size="sm" 
+                                                                    onClick={() => handleEdit(subCategory._id)}
+                                                                >
                                                                     <Edit className="w-4 h-4" />
                                                                     Sửa
                                                                 </ActionButton>
-                                                                <ActionButton variant="danger" size="sm" onClick={() => handleDelete(subCategory._id)}>
+                                                                <ActionButton 
+                                                                    variant="danger" 
+                                                                    size="sm" 
+                                                                    onClick={() => handleDelete(subCategory._id, subCategory.name)}
+                                                                >
                                                                     <Trash2 className="w-4 h-4" />
                                                                     Xóa
                                                                 </ActionButton>
@@ -625,18 +783,8 @@ export default function SubCategoryManagement() {
                             )}
                         </div>
 
-                        {/* Pagination */}
                         {totalItems > 0 && <Pagination />}
                     </>
-                )}
-
-                {/* Results Summary */}
-                {totalItems > 0 && (
-                    <div className="mt-6 text-center text-sm text-gray-700">
-                        Hiển thị {startIdx + 1}-{endIdx} / {totalItems} danh mục con
-                        {search && ` cho "${search}"`}
-                        {hasActiveFilters && " (đã lọc)"}
-                    </div>
                 )}
             </div>
         </div>

@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { Edit, Trash2, Plus, Search, Filter, X, FolderOpen } from "lucide-react";
+import { Eye } from "lucide-react"; // Thêm icon
 import { useRouter } from "next/navigation";
 import toast from 'react-hot-toast';
 
@@ -15,8 +16,8 @@ export default function CategoryManagement() {
     // Filter states
     const [showFilters, setShowFilters] = useState(false);
     const [filters, setFilters] = useState({
-        status: "", // "active", "inactive", ""
-        sortBy: "name" // "name", "createdAt", "updatedAt"
+        status: "",
+        sortBy: "name"
     });
 
     // Fetch categories từ API
@@ -35,7 +36,6 @@ export default function CategoryManagement() {
                 const data = await response.json();
                 console.log('✅ Categories data received:', data);
 
-                // Transform data để đảm bảo consistency
                 const transformedData = data.map(category => ({
                     _id: category._id,
                     name: category.name,
@@ -60,19 +60,16 @@ export default function CategoryManagement() {
 
     // Filter categories
     const filtered = categoryList.filter((category) => {
-        // Search filter
         const matchesSearch = !search ||
             category.name?.toLowerCase().includes(search.toLowerCase()) ||
             category.description?.toLowerCase().includes(search.toLowerCase());
 
-        // Status filter
         const matchesStatus = !filters.status ||
             (filters.status === "active" && category.active) ||
             (filters.status === "inactive" && !category.active);
 
         return matchesSearch && matchesStatus;
     }).sort((a, b) => {
-        // Sort logic
         switch (filters.sortBy) {
             case "name":
                 return a.name.localeCompare(b.name);
@@ -94,59 +91,167 @@ export default function CategoryManagement() {
         setSearch("");
     };
 
-    // Check if any filters are active
     const hasActiveFilters = search || filters.status !== "" || filters.sortBy !== "name";
 
-    // Toggle category status
-    const toggleActive = async (categoryId) => {
-        try {
-            console.log(`🔄 Toggling status for category: ${categoryId}`);
+    // ✅ TOGGLE STATUS - CÓ CONFIRM
+    const toggleActive = async (categoryId, categoryName, currentStatus) => {
+        const action = currentStatus ? 'TẠM DỪNG' : 'KÍCH HOẠT';
+        const newStatusText = currentStatus ? 'Tạm dừng' : 'Hoạt động';
+        const currentStatusText = currentStatus ? 'Hoạt động' : 'Tạm dừng';
 
-            // ✅ Sử dụng đúng endpoint từ controller
-            const response = await fetch(`http://localhost:3000/api/categories/${categoryId}/toggle-status`, {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
+        if (confirm(
+            `⚠️ ${action} danh mục "${categoryName}"?\n\n` +
+            `Trạng thái sẽ chuyển từ "${currentStatusText}" sang "${newStatusText}"\n\n` +
+            `Bạn có chắc chắn?`
+        )) {
+            try {
+                console.log(`🔄 Toggling status for category: ${categoryId}`);
+
+                const response = await fetch(`http://localhost:3000/api/categories/${categoryId}/toggle-status`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || 'Lỗi cập nhật trạng thái');
                 }
-            });
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'Lỗi cập nhật trạng thái');
+                const result = await response.json();
+                console.log('✅ Toggle response:', result);
+
+                const newStatus = result.isActive === "true" || result.isActive === true;
+
+                // ✅ CẬP NHẬT STATE
+                setCategoryList(prev => prev.map(category =>
+                    category._id === categoryId
+                        ? { ...category, active: newStatus }
+                        : category
+                ));
+
+                // ✅ TOAST SUCCESS
+                if (newStatus) {
+                    toast.success(`✅ Đã kích hoạt: ${categoryName}`, {
+                        duration: 3000,
+                        style: { background: '#10B981', color: '#fff', fontWeight: 'bold' }
+                    });
+                } else {
+                    toast.success(`⏸️ Đã tạm dừng: ${categoryName}`, {
+                        duration: 3000,
+                        style: { background: '#F59E0B', color: '#fff', fontWeight: 'bold' }
+                    });
+                }
+
+            } catch (error) {
+                console.error('❌ Error updating category status:', error);
+
+                // ✅ HIỂN THỊ LỖI RÀNG BUỘC
+                if (error.message.includes('danh mục con')) {
+                    toast.error(error.message, {
+                        duration: 6000,
+                        style: { 
+                            borderRadius: '10px', 
+                            background: '#EF4444', 
+                            color: '#fff', 
+                            fontWeight: 'bold', 
+                            maxWidth: '500px' 
+                        },
+                        icon: '🚫',
+                    });
+                } else if (error.message.includes('sản phẩm')) {
+                    toast.error(error.message, {
+                        duration: 6000,
+                        style: { 
+                            borderRadius: '10px', 
+                            background: '#EF4444', 
+                            color: '#fff', 
+                            fontWeight: 'bold', 
+                            maxWidth: '500px' 
+                        },
+                        icon: '🚫',
+                    });
+                } else {
+                    toast.error(`❌ Lỗi: ${error.message}`, { duration: 3000 });
+                }
             }
+        }
+    };
 
-            const result = await response.json();
-            console.log('✅ Toggle response:', result);
+    // ✅ HARD DELETE - CÓ CONFIRM
+    const handleDelete = async (categoryId, categoryName) => {
+        if (confirm(
+            `🗑️ XÓA VĨNH VIỄN danh mục "${categoryName}"?\n\n` +
+            `⚠️ CẢNH BÁO:\n` +
+            `- Danh mục sẽ bị xóa VĨNH VIỄN khỏi database\n` +
+            `- KHÔNG THỂ KHÔI PHỤC\n` +
+            `- Chỉ xóa được khi:\n` +
+            `  + KHÔNG CÒN danh mục con nào\n` +
+            `  + KHÔNG CÒN sản phẩm nào\n\n` +
+            `Bạn có chắc chắn?`
+        )) {
+            try {
+                console.log(`🗑️ Hard deleting category: ${categoryId}`);
 
-            // ✅ Update UI với trạng thái mới từ server
-            setCategoryList(prev => prev.map(category =>
-                category._id === categoryId
-                    ? { ...category, active: result.isActive === "true" || result.isActive === true }
-                    : category
-            ));
-
-            // Show appropriate toast
-            if (result.isActive === "true" || result.isActive === true) {
-                toast.success('Danh mục đã được kích hoạt', {
-                    duration: 2000,
-                    icon: '✅',
+                const response = await fetch(`http://localhost:3000/api/categories/${categoryId}`, {
+                    method: 'DELETE'
                 });
-            } else {
-                toast('Danh mục đã được tạm dừng', {
-                    icon: '⚠️',
-                    style: {
-                        borderRadius: '10px',
-                        background: '#F59E0B',
-                        color: '#fff',
-                        fontWeight: 'bold',
-                    },
-                    duration: 3000,
-                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || 'Lỗi xóa danh mục');
+                }
+
+                const result = await response.json();
+
+                // ✅ XÓA KHỎI LIST
+                setCategoryList(prev => prev.filter(cat => cat._id !== categoryId));
+
+                // ✅ TOAST SUCCESS
+                toast.success(
+                    `🗑️ ${result.message}`,
+                    {
+                        duration: 5000,
+                        style: { background: '#DC2626', color: '#fff', fontWeight: 'bold' }
+                    }
+                );
+
+            } catch (error) {
+                console.error('❌ Error deleting category:', error);
+
+                // ✅ HIỂN THỊ LỖI RÀNG BUỘC
+                if (error.message.includes('danh mục con')) {
+                    toast.error(error.message, {
+                        duration: 6000,
+                        style: { 
+                            borderRadius: '10px', 
+                            background: '#EF4444', 
+                            color: '#fff', 
+                            fontWeight: 'bold', 
+                            maxWidth: '500px',
+                            padding: '16px'
+                        },
+                        icon: '🚫',
+                    });
+                } else if (error.message.includes('sản phẩm')) {
+                    toast.error(error.message, {
+                        duration: 6000,
+                        style: { 
+                            borderRadius: '10px', 
+                            background: '#EF4444', 
+                            color: '#fff', 
+                            fontWeight: 'bold', 
+                            maxWidth: '500px',
+                            padding: '16px'
+                        },
+                        icon: '🚫',
+                    });
+                } else {
+                    toast.error(`❌ Lỗi: ${error.message}`, {
+                        duration: 4000,
+                        style: { borderRadius: '10px', background: '#EF4444', color: '#fff', fontWeight: 'bold' }
+                    });
+                }
             }
-
-        } catch (error) {
-            console.error('❌ Error updating category status:', error);
-            toast.error(`Lỗi: ${error.message}`);
         }
     };
 
@@ -177,7 +282,8 @@ export default function CategoryManagement() {
             success: "bg-green-600 hover:bg-green-700 text-white focus:ring-green-500 shadow-sm hover:shadow-md",
             danger: "bg-red-600 hover:bg-red-700 text-white focus:ring-red-500 shadow-sm hover:shadow-md",
             secondary: "bg-gray-100 hover:bg-gray-200 text-gray-700 focus:ring-gray-500 border border-gray-300",
-            outline: "border-2 border-gray-300 hover:border-gray-400 text-gray-700 hover:bg-gray-50 focus:ring-gray-500"
+            outline: "border-2 border-gray-300 hover:border-gray-400 text-gray-700 hover:bg-gray-50 focus:ring-gray-500",
+            warning: "bg-orange-400 hover:bg-orange-500 text-white focus:ring-orange-400 shadow-sm hover:shadow-md" // ✅ Màu vàng cam dịu nhẹ
         };
 
         const sizes = {
@@ -197,11 +303,9 @@ export default function CategoryManagement() {
         );
     };
 
-    // Category Card component
     const CategoryCard = ({ category }) => (
         <div className={`bg-white rounded-lg shadow-sm border-2 border-gray-300 hover:shadow-md hover:border-gray-400 transition-all duration-200 overflow-hidden ${!category.active ? 'opacity-75' : ''}`}>
             <div className="p-6">
-                {/* Icon section */}
                 <div className="mb-4 flex justify-center">
                     <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
                         <FolderOpen className="w-8 h-8 text-blue-600" />
@@ -217,7 +321,7 @@ export default function CategoryManagement() {
                         <span className="text-sm text-gray-500">Trạng thái:</span>
                         <ToggleSwitch
                             isActive={category.active}
-                            onToggle={() => toggleActive(category._id)}
+                            onToggle={() => toggleActive(category._id, category.name, category.active)}
                         />
                         <span className={`text-sm font-medium ${category.active ? 'text-green-600' : 'text-gray-500'}`}>
                             {category.active ? 'Hoạt động' : 'Tạm dừng'}
@@ -235,8 +339,9 @@ export default function CategoryManagement() {
                 </div>
 
                 <div className="flex gap-2">
+                    
                     <ActionButton
-                        variant="secondary"
+                        variant="warning"
                         size="sm"
                         onClick={() => handleEdit(category._id)}
                     >
@@ -246,7 +351,7 @@ export default function CategoryManagement() {
                     <ActionButton
                         variant="danger"
                         size="sm"
-                        onClick={() => handleDelete(category._id)}
+                        onClick={() => handleDelete(category._id, category.name)}
                     >
                         <Trash2 className="w-4 h-4" />
                         Xóa
@@ -293,53 +398,6 @@ export default function CategoryManagement() {
         router.push(`/categories/${categoryId}/edit`);
     };
 
-    // Soft delete category
-    const handleDelete = async (categoryId) => {
-        if (confirm('Bạn có chắc chắn muốn xóa danh mục này? Danh mục sẽ được chuyển sang trạng thái tạm dừng.')) {
-            try {
-                console.log(`🗑️ Soft deleting category: ${categoryId}`);
-
-                // ✅ Sử dụng soft-delete endpoint thay vì DELETE
-                const response = await fetch(`http://localhost:3000/api/categories/${categoryId}/soft-delete`, {
-                    method: 'PATCH',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    }
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.message || 'Lỗi xóa danh mục');
-                }
-
-                const result = await response.json();
-                console.log('✅ Soft delete response:', result);
-
-                // ✅ Set thành inactive dựa trên response từ server
-                setCategoryList(prev => prev.map(category =>
-                    category._id === categoryId
-                        ? { ...category, active: result.isActive === "true" || result.isActive === true }
-                        : category
-                ));
-
-                toast('Danh mục đã được chuyển sang trạng thái tạm dừng', {
-                    icon: '⚠️',
-                    style: {
-                        borderRadius: '10px',
-                        background: '#F59E0B',
-                        color: '#fff',
-                        fontWeight: 'bold',
-                    },
-                    duration: 4000,
-                });
-
-            } catch (error) {
-                console.error('❌ Error soft deleting category:', error);
-                toast.error(`Lỗi: ${error.message}`);
-            }
-        }
-    };
-
     return (
         <div className="min-h-screen bg-gray-50">
             <div className="max-w-7xl mx-auto p-4 lg:p-8">
@@ -378,15 +436,16 @@ export default function CategoryManagement() {
                         <div className="flex gap-2">
                             <button
                                 onClick={() => setShowFilters(!showFilters)}
-                                className={`flex items-center gap-2 px-4 py-3 border-2 rounded-lg transition-colors ${+   showFilters || hasActiveFilters
-                                    ? "border-black bg-black text-white"
-                                    : "border-black text-black hover:bg-gray-100"
-                                    }`}
+                                className={`flex items-center gap-2 px-4 py-3 border-2 rounded-lg transition-colors ${
+                                    showFilters || hasActiveFilters
+                                        ? "border-black bg-black text-white"
+                                        : "border-black text-black hover:bg-gray-100"
+                                }`}
                             >
                                 <Filter className="w-4 h-4" />
                                 <span className="hidden sm:inline">Lọc</span>
                                 {hasActiveFilters && (
-                                    <span className="bg-black text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                                    <span className="bg-white text-black text-xs rounded-full w-5 h-5 flex items-center justify-center">
                                         {Object.values(filters).filter(f => f !== "" && f !== "name").length + (search ? 1 : 0)}
                                     </span>
                                 )}
@@ -402,23 +461,24 @@ export default function CategoryManagement() {
                                 </button>
                             )}
 
-                            {/* View Mode Toggle */}
                             <div className="hidden md:flex bg-gray-100 rounded-lg p-1 border-2 border-gray-300">
                                 <button
                                     onClick={() => setViewMode("table")}
-                                    className={`px-3 py-2 text-sm rounded-md transition-colors ${viewMode === "table"
-                                        ? "bg-white text-gray-900 shadow-sm border border-gray-300"
-                                        : "text-gray-600 hover:text-gray-900"
-                                        }`}
+                                    className={`px-3 py-2 text-sm rounded-md transition-colors ${
+                                        viewMode === "table"
+                                            ? "bg-white text-gray-900 shadow-sm border border-gray-300"
+                                            : "text-gray-600 hover:text-gray-900"
+                                    }`}
                                 >
                                     Bảng
                                 </button>
                                 <button
                                     onClick={() => setViewMode("card")}
-                                    className={`px-3 py-2 text-sm rounded-md transition-colors ${viewMode === "card"
-                                        ? "bg-white text-gray-900 shadow-sm border border-gray-300"
-                                        : "text-gray-600 hover:text-gray-900"
-                                        }`}
+                                    className={`px-3 py-2 text-sm rounded-md transition-colors ${
+                                        viewMode === "card"
+                                            ? "bg-white text-gray-900 shadow-sm border border-gray-300"
+                                            : "text-gray-600 hover:text-gray-900"
+                                    }`}
                                 >
                                     Thẻ
                                 </button>
@@ -430,7 +490,6 @@ export default function CategoryManagement() {
                     {showFilters && (
                         <div className="mt-4 p-4 bg-white rounded-lg border-2 border-gray-300 shadow-sm">
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {/* Status Filter */}
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">Trạng thái</label>
                                     <select
@@ -444,7 +503,6 @@ export default function CategoryManagement() {
                                     </select>
                                 </div>
 
-                                {/* Sort By Filter */}
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">Sắp xếp theo</label>
                                     <select
@@ -477,7 +535,6 @@ export default function CategoryManagement() {
                     </div>
                 ) : (
                     <>
-                        {/* Mobile/Tablet Card View */}
                         <div className="md:hidden">
                             <div className="grid gap-4">
                                 {filtered.map((category) => (
@@ -486,7 +543,6 @@ export default function CategoryManagement() {
                             </div>
                         </div>
 
-                        {/* Desktop View */}
                         <div className="hidden md:block">
                             {viewMode === "card" ? (
                                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -527,7 +583,7 @@ export default function CategoryManagement() {
                                                             <div className="flex items-center gap-3">
                                                                 <ToggleSwitch
                                                                     isActive={category.active}
-                                                                    onToggle={() => toggleActive(category._id)}
+                                                                    onToggle={() => toggleActive(category._id, category.name, category.active)}
                                                                 />
                                                                 <span className={`text-sm font-medium ${category.active ? 'text-green-600' : 'text-gray-500'}`}>
                                                                     {category.active ? 'Hoạt động' : 'Tạm dừng'}
@@ -541,8 +597,16 @@ export default function CategoryManagement() {
                                                         </td>
                                                         <td className="py-4 px-6">
                                                             <div className="flex gap-2">
+                                                                 <ActionButton
+            variant="secondary"
+            size="sm"
+            onClick={() => router.push(`/categories/${category._id}`)}
+        >
+            <Eye className="w-4 h-4" />
+            Xem
+        </ActionButton>
                                                                 <ActionButton
-                                                                    variant="secondary"
+                                                                    variant="warning"
                                                                     size="sm"
                                                                     onClick={() => handleEdit(category._id)}
                                                                 >
@@ -552,7 +616,7 @@ export default function CategoryManagement() {
                                                                 <ActionButton
                                                                     variant="danger"
                                                                     size="sm"
-                                                                    onClick={() => handleDelete(category._id)}
+                                                                    onClick={() => handleDelete(category._id, category.name)}
                                                                 >
                                                                     <Trash2 className="w-4 h-4" />
                                                                     Xóa
@@ -570,7 +634,6 @@ export default function CategoryManagement() {
                     </>
                 )}
 
-                {/* Results Summary */}
                 {filtered.length > 0 && (
                     <div className="mt-6 text-center text-sm text-gray-500">
                         Hiển thị {filtered.length} / {categoryList.length} danh mục

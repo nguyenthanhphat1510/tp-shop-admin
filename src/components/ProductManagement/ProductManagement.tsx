@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useMemo } from "react";
-import { Edit, Trash2, Plus, Search } from "lucide-react";
+import { Edit, Trash2, Plus, Search, Filter, X, ChevronDown } from "lucide-react";
 import { useRouter } from "next/navigation";
 import toast from 'react-hot-toast';
 
@@ -39,6 +39,7 @@ export default function ProductsPage() {
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(PAGE_SIZES[0]);
 
+    // ✅ FILTERS STATE
     const [showFilters, setShowFilters] = useState(false);
     const [filters, setFilters] = useState({
         category: "",
@@ -128,7 +129,7 @@ export default function ProductsPage() {
         }
     }, [categories, subcategories]);
 
-    // Filtering
+    // ✅ FILTERING LOGIC
     const filtered = useMemo(() => productList.filter((variant) => {
         const matchesSearch =
             !search ||
@@ -157,15 +158,17 @@ export default function ProductsPage() {
         return matchesSearch && matchesCategory && matchesSubcategory && matchesStatus && matchesPriceRange && matchesStockLevel;
     }), [productList, search, filters]);
 
+    // ✅ FILTERED SUBCATEGORIES
     const filteredSubcategories = useMemo(() => filters.category
         ? subcategories.filter((sub) => sub.categoryId === filters.category)
         : [], [subcategories, filters.category]);
 
+    // ✅ RESET PAGE WHEN FILTERS CHANGE
     useEffect(() => {
         setPage(1);
     }, [search, filters, pageSize]);
 
-    // Pagination
+    // ✅ PAGINATION
     const totalItems = filtered.length;
     const totalPages = Math.ceil(totalItems / pageSize);
     const safePage = Math.max(1, Math.min(page, totalPages || 1));
@@ -175,11 +178,25 @@ export default function ProductsPage() {
 
     const uniqueProductCount = useMemo(() => new Set(productList.map(p => p.productId)).size, [productList]);
 
+    // ✅ CLEAR FILTERS
+    const clearFilters = () => {
+        setFilters({
+            category: "",
+            subcategory: "",
+            status: "",
+            priceRange: "",
+            stockLevel: ""
+        });
+    };
+
+    // ✅ COUNT ACTIVE FILTERS
+    const activeFiltersCount = Object.values(filters).filter(v => v !== "").length;
+
     // ✅ TOGGLE STATUS - CÓ CONFIRM
     const toggleActive = async (variantId: string, currentStatus: boolean, variantName: string, storage: string, color: string) => {
         const action = currentStatus ? 'TẠM DỪNG' : 'KÍCH HOẠT';
         const variantInfo = `${variantName} (${storage} - ${color})`;
-        
+
         if (confirm(`⚠️ ${action} phiên bản "${variantInfo}"?\n\nTrạng thái sẽ chuyển từ "${currentStatus ? 'Hoạt động' : 'Tạm dừng'}" sang "${currentStatus ? 'Tạm dừng' : 'Hoạt động'}"`)) {
             try {
                 const response = await fetch(`http://localhost:3000/api/products/variants/${variantId}/toggle`, {
@@ -222,9 +239,71 @@ export default function ProductsPage() {
         }
     };
 
-    // ✅ HARD DELETE
-    const handleDelete = async (productId: string, productName: string) => {
-        if (confirm(`🗑️ XÓA VĨNH VIỄN sản phẩm "${productName}"?\n\n⚠️ CẢNH BÁO:\n- Sản phẩm và tất cả phiên bản sẽ bị xóa\n- Tất cả ảnh sẽ bị xóa khỏi Cloudinary\n- KHÔNG THỂ KHÔI PHỤC\n\nBạn có chắc chắn?`)) {
+    // ✅ FUNCTION - NHẬN CẢ OBJECT
+    const handleDeleteVariant = async (variant: ProductVariantItem) => {
+        const variantInfo = `${variant.name} (${variant.storage} - ${variant.color})`;
+        const imageCount = variant.images?.length || 0;
+        
+        if (confirm(
+            `🗑️ XÓA VARIANT "${variantInfo}"?\n\n` +
+            `⚠️ CẢNH BÁO:\n` +
+            `- Variant này sẽ bị xóa vĩnh viễn\n` +
+            `- Tất cả ảnh (${imageCount}) sẽ bị xóa khỏi Cloudinary\n` +
+            `- KHÔNG THỂ KHÔI PHỤC\n\n` +
+            `Bạn có chắc chắn?`
+        )) {
+            try {
+                const response = await fetch(`http://localhost:3000/api/products/variants/${variant._id}`, {
+                    method: 'DELETE'
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || 'Lỗi xóa variant');
+                }
+
+                const result = await response.json();
+
+                // ✅ XÓA KHỎI LIST
+                setProductList((prev) => prev.filter((item) => item._id !== variant._id));
+
+                // ✅ TOAST SUCCESS
+                toast.success(
+                    `🗑️ ${result.message}\n\n` +
+                    `Đã xóa: ${result.data.deletedImagesCount} ảnh\n` +
+                    `Còn lại: ${result.data.remainingVariants} variants`,
+                    {
+                        duration: 5000,
+                        style: { background: '#DC2626', color: '#fff', fontWeight: 'bold' }
+                    }
+                );
+            } catch (error: any) {
+                console.error('❌ Error deleting variant:', error);
+                
+                if (error.message.includes('cuối cùng')) {
+                    toast.error(
+                        `❌ Không thể xóa variant cuối cùng!\n\n` +
+                        `Sản phẩm phải có ít nhất 1 variant.\n` +
+                        `Vui lòng xóa cả sản phẩm nếu muốn xóa hết.`,
+                        { duration: 6000 }
+                    );
+                } else {
+                    toast.error(`❌ Lỗi: ${error.message}`);
+                }
+            }
+        }
+    };
+
+    // ✅ XÓA CẢ PRODUCT (OPTIONAL - GIỮ LẠI NẾU CẦN)
+    const handleDeleteProduct = async (productId: string, productName: string) => {
+        if (confirm(
+            `🗑️ XÓA VĨNH VIỄN sản phẩm "${productName}"?\n\n` +
+            `⚠️ CẢNH BÁO:\n` +
+            `- Sản phẩm và TẤT CẢ phiên bản sẽ bị xóa\n` +
+            `- Tất cả ảnh sẽ bị xóa khỏi Cloudinary\n` +
+            `- KHÔNG THỂ KHÔI PHỤC\n\n` +
+            `Bạn có chắc chắn?`
+        )) {
             try {
                 const response = await fetch(`http://localhost:3000/api/products/${productId}`, {
                     method: 'DELETE'
@@ -237,6 +316,7 @@ export default function ProductsPage() {
 
                 const result = await response.json();
 
+                // ✅ XÓA TẤT CẢ VARIANTS CỦA PRODUCT
                 setProductList((prev) => prev.filter((variant) => variant.productId !== productId));
 
                 toast.success(`🗑️ ${result.message}`, {
@@ -249,8 +329,9 @@ export default function ProductsPage() {
         }
     };
 
-    const handleEdit = (productId: string) => {
-        router.push(`/products/${productId}/edit`);
+    // ✅ FIX: Thay đổi từ edit product sang edit variant
+    const handleEdit = (variantId: string) => {
+        router.push(`/products/variants/${variantId}/edit`);
     };
 
     // Reusable Components
@@ -294,10 +375,15 @@ export default function ProductsPage() {
                     <div className="text-sm text-gray-500">Kho: {variant.stock}</div>
                 </div>
                 <div className="flex gap-2">
-                    <ActionButton variant="secondary" size="sm" onClick={() => handleEdit(variant.productId)}>
+                    <ActionButton variant="secondary" size="sm" onClick={() => handleEdit(variant._id)}>
                         <Edit className="w-4 h-4" /> Sửa
                     </ActionButton>
-                    <ActionButton variant="danger" size="sm" onClick={() => handleDelete(variant.productId, variant.name)}>
+                    {/* ✅ TRUYỀN CẢ OBJECT */}
+                    <ActionButton 
+                        variant="danger" 
+                        size="sm" 
+                        onClick={() => handleDeleteVariant(variant)}
+                    >
                         <Trash2 className="w-4 h-4" /> Xóa
                     </ActionButton>
                 </div>
@@ -316,35 +402,247 @@ export default function ProductsPage() {
     return (
         <div className="min-h-screen bg-gray-50">
             <div className="max-w-7xl mx-auto p-4 lg:p-8">
+                {/* Header */}
                 <div className="mb-8">
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
                         <div>
                             <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-2">Quản Lý Sản Phẩm</h1>
-                            <p className="text-gray-600">Quản lý {uniqueProductCount} sản phẩm ({productList.length} phiên bản)</p>
+                            <p className="text-gray-600">
+                                Quản lý {uniqueProductCount} sản phẩm ({productList.length} phiên bản)
+                                {activeFiltersCount > 0 && (
+                                    <span className="ml-2 text-blue-600 font-medium">
+                                        • {filtered.length} kết quả lọc
+                                    </span>
+                                )}
+                            </p>
                         </div>
-                        <button onClick={() => router.push('/products/add')} className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-colors shadow-sm"><Plus className="w-5 h-5" /> Thêm sản phẩm</button>
+                        <button
+                            onClick={() => router.push('/products/add')}
+                            className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-colors shadow-sm"
+                        >
+                            <Plus className="w-5 h-5" /> Thêm sản phẩm
+                        </button>
                     </div>
 
+                    {/* ✅ SEARCH + FILTER BAR */}
                     <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center">
+                        {/* Search */}
                         <div className="relative flex-1 max-w-md">
-                            <input className="peer w-full border-2 border-gray-400 rounded-lg pl-10 pr-4 py-3 text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-black focus:border-black outline-none transition-colors" placeholder="Tìm tên, dung lượng, màu sắc..." value={search} onChange={(e) => setSearch(e.target.value)} />
-                            <Search className="absolute left-3 top-3.5 w-5 h-5 text-gray-400 transition-colors peer-focus:text-black" />
+                            <input
+                                className="peer w-full border-2 border-gray-400 rounded-lg pl-10 pr-4 py-3 text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+                                placeholder="Tìm tên, dung lượng, màu sắc..."
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                            />
+                            <Search className="absolute left-3 top-3.5 w-5 h-5 text-gray-400 transition-colors peer-focus:text-blue-600" />
                         </div>
+
+                        {/* ✅ FILTER BUTTON - Chỉ đổi viền khi active */}
+                        <button
+                            onClick={() => setShowFilters(!showFilters)}
+                            className={`flex items-center gap-2 px-4 py-3 rounded-lg font-medium border-2 transition-all bg-white ${showFilters || activeFiltersCount > 0
+                                    ? 'text-blue-600 border-blue-600 shadow-md'
+                                    : 'text-gray-700 border-gray-400 hover:border-blue-500 hover:bg-blue-50'
+                                }`}
+                        >
+                            <Filter className="w-5 h-5" />
+                            Bộ lọc
+                            {activeFiltersCount > 0 && (
+                                <span className="ml-1 px-2 py-0.5 bg-blue-600 text-white rounded-full text-xs font-bold">
+                                    {activeFiltersCount}
+                                </span>
+                            )}
+                            <ChevronDown className={`w-4 h-4 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+                        </button>
                     </div>
+
+                    {/* ✅ FILTERS PANEL */}
+                    {showFilters && (
+                        <div className="mt-4 bg-white border-2 border-gray-300 rounded-lg p-6 shadow-lg animate-slideDown">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-lg font-semibold text-gray-900">Bộ lọc nâng cao</h3>
+                                {activeFiltersCount > 0 && (
+                                    <button
+                                        onClick={clearFilters}
+                                        className="flex items-center gap-1 text-sm text-red-600 hover:text-red-700 font-medium"
+                                    >
+                                        <X className="w-4 h-4" />
+                                        Xóa tất cả
+                                    </button>
+                                )}
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                                {/* Category Filter */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Danh mục
+                                    </label>
+                                    <select
+                                        value={filters.category}
+                                        onChange={(e) => setFilters(prev => ({
+                                            ...prev,
+                                            category: e.target.value,
+                                            subcategory: "" // Reset subcategory when category changes
+                                        }))}
+                                        className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+                                    >
+                                        <option value="">Tất cả</option>
+                                        {categories.map(cat => (
+                                            <option key={cat._id} value={cat._id}>{cat.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Subcategory Filter */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Danh mục con
+                                    </label>
+                                    <select
+                                        value={filters.subcategory}
+                                        onChange={(e) => setFilters(prev => ({ ...prev, subcategory: e.target.value }))}
+                                        disabled={!filters.category}
+                                        className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        <option value="">Tất cả</option>
+                                        {filteredSubcategories.map(sub => (
+                                            <option key={sub._id} value={sub._id}>{sub.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Status Filter */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Trạng thái
+                                    </label>
+                                    <select
+                                        value={filters.status}
+                                        onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+                                        className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+                                    >
+                                        <option value="">Tất cả</option>
+                                        <option value="active">Hoạt động</option>
+                                        <option value="inactive">Tạm dừng</option>
+                                    </select>
+                                </div>
+
+                                {/* Price Range Filter */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Khoảng giá
+                                    </label>
+                                    <select
+                                        value={filters.priceRange}
+                                        onChange={(e) => setFilters(prev => ({ ...prev, priceRange: e.target.value }))}
+                                        className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+                                    >
+                                        <option value="">Tất cả</option>
+                                        <option value="low">&lt; 5 triệu</option>
+                                        <option value="medium">5-15 triệu</option>
+                                        <option value="high">&ge; 15 triệu</option>
+                                    </select>
+                                </div>
+
+                                {/* Stock Level Filter */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Tồn kho
+                                    </label>
+                                    <select
+                                        value={filters.stockLevel}
+                                        onChange={(e) => setFilters(prev => ({ ...prev, stockLevel: e.target.value }))}
+                                        className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+                                    >
+                                        <option value="">Tất cả</option>
+                                        <option value="in-stock">Còn hàng (&gt; 20)</option>
+                                        <option value="low-stock">Sắp hết (1-20)</option>
+                                        <option value="out-of-stock">Hết hàng</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* ✅ ACTIVE FILTERS TAGS */}
+                            {activeFiltersCount > 0 && (
+                                <div className="mt-4 pt-4 border-t-2 border-gray-200">
+                                    <p className="text-sm text-gray-600 mb-2">Đang lọc theo:</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {filters.category && (
+                                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium border-2 border-blue-300">
+                                                {categories.find(c => c._id === filters.category)?.name}
+                                                <button onClick={() => setFilters(prev => ({ ...prev, category: "", subcategory: "" }))} className="hover:bg-blue-200 rounded-full p-0.5">
+                                                    <X className="w-3 h-3" />
+                                                </button>
+                                            </span>
+                                        )}
+                                        {filters.subcategory && (
+                                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium border-2 border-purple-300">
+                                                {subcategories.find(s => s._id === filters.subcategory)?.name}
+                                                <button onClick={() => setFilters(prev => ({ ...prev, subcategory: "" }))} className="hover:bg-purple-200 rounded-full p-0.5">
+                                                    <X className="w-3 h-3" />
+                                                </button>
+                                            </span>
+                                        )}
+                                        {filters.status && (
+                                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium border-2 border-green-300">
+                                                {filters.status === "active" ? "Hoạt động" : "Tạm dừng"}
+                                                <button onClick={() => setFilters(prev => ({ ...prev, status: "" }))} className="hover:bg-green-200 rounded-full p-0.5">
+                                                    <X className="w-3 h-3" />
+                                                </button>
+                                            </span>
+                                        )}
+                                        {filters.priceRange && (
+                                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-sm font-medium border-2 border-yellow-300">
+                                                {filters.priceRange === "low" && "< 5 triệu"}
+                                                {filters.priceRange === "medium" && "5-15 triệu"}
+                                                {filters.priceRange === "high" && "≥ 15 triệu"}
+                                                <button onClick={() => setFilters(prev => ({ ...prev, priceRange: "" }))} className="hover:bg-yellow-200 rounded-full p-0.5">
+                                                    <X className="w-3 h-3" />
+                                                </button>
+                                            </span>
+                                        )}
+                                        {filters.stockLevel && (
+                                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm font-medium border-2 border-red-300">
+                                                {filters.stockLevel === "in-stock" && "Còn hàng"}
+                                                {filters.stockLevel === "low-stock" && "Sắp hết"}
+                                                {filters.stockLevel === "out-of-stock" && "Hết hàng"}
+                                                <button onClick={() => setFilters(prev => ({ ...prev, stockLevel: "" }))} className="hover:bg-red-200 rounded-full p-0.5">
+                                                    <X className="w-3 h-3" />
+                                                </button>
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
 
+                {/* ✅ RESULTS */}
                 {totalItems === 0 ? (
                     <div className="bg-white rounded-lg shadow-sm border-2 border-gray-300 p-12 text-center">
                         <Search className="w-12 h-12 mx-auto mb-4 text-gray-400" />
                         <h3 className="text-lg font-medium text-gray-900 mb-2">Không tìm thấy sản phẩm</h3>
-                        <p className="text-gray-500">Thử thay đổi từ khóa tìm kiếm hoặc xóa bộ lọc.</p>
+                        <p className="text-gray-500 mb-4">Thử thay đổi từ khóa tìm kiếm hoặc xóa bộ lọc.</p>
+                        {activeFiltersCount > 0 && (
+                            <button
+                                onClick={clearFilters}
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+                            >
+                                <X className="w-4 h-4" />
+                                Xóa bộ lọc
+                            </button>
+                        )}
                     </div>
                 ) : (
                     <>
+                        {/* Mobile Card View */}
                         <div className="md:hidden grid gap-4">
                             {paginated.map((variant) => <ProductCard key={variant._id} variant={variant} />)}
                         </div>
 
+                        {/* Desktop Table/Card View */}
                         <div className="hidden md:block">
                             {viewMode === "card" ? (
                                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -398,10 +696,21 @@ export default function ProductsPage() {
                                                         </td>
                                                         <td className="py-4 px-6">
                                                             <div className="flex gap-2">
-                                                                <ActionButton variant="secondary" size="sm" onClick={() => handleEdit(variant.productId)}>
+                                                                {/* ✅ NÚT SỬA */}
+                                                                <ActionButton 
+                                                                    variant="secondary" 
+                                                                    size="sm" 
+                                                                    onClick={() => handleEdit(variant._id)}
+                                                                >
                                                                     <Edit className="w-4 h-4" /> Sửa
                                                                 </ActionButton>
-                                                                <ActionButton variant="danger" size="sm" onClick={() => handleDelete(variant.productId, variant.name)}>
+                                                                
+                                                                {/* ✅ TRUYỀN CẢ OBJECT */}
+                                                                <ActionButton 
+                                                                    variant="danger" 
+                                                                    size="sm" 
+                                                                    onClick={() => handleDeleteVariant(variant)}
+                                                                >
                                                                     <Trash2 className="w-4 h-4" /> Xóa
                                                                 </ActionButton>
                                                             </div>
@@ -414,6 +723,34 @@ export default function ProductsPage() {
                                 </div>
                             )}
                         </div>
+
+                        {/* ✅ PAGINATION */}
+                        {totalPages > 1 && (
+                            <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 bg-white border-2 border-gray-300 rounded-lg p-4">
+                                <div className="text-sm text-gray-600">
+                                    Hiển thị <span className="font-semibold text-gray-900">{startIdx + 1}</span> - <span className="font-semibold text-gray-900">{endIdx}</span> trong tổng số <span className="font-semibold text-gray-900">{totalItems}</span> sản phẩm
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                                        disabled={safePage === 1}
+                                        className="px-3 py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-gray-700"
+                                    >
+                                        Trước
+                                    </button>
+                                    <span className="text-sm text-gray-600">
+                                        Trang <span className="font-semibold text-gray-900">{safePage}</span> / {totalPages}
+                                    </span>
+                                    <button
+                                        onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                                        disabled={safePage === totalPages}
+                                        className="px-3 py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-gray-700"
+                                    >
+                                        Sau
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </>
                 )}
             </div>
