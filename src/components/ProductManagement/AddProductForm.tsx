@@ -30,22 +30,16 @@ const variantSchema = z.object({
     storage: z.string().min(1, "Dung lượng là bắt buộc"),
     color: z.string().min(1, "Màu sắc là bắt buộc"),
     price: z.preprocess(
-        (val) => {
-            if (val === '' || val === null || val === undefined) return undefined;
-            return Number(String(val).replace(/,/g, ''));
-        },
-        z.number({ 
-            invalid_type_error: "Giá phải là số" // ✅ Use invalid_type_error instead
-        }).min(1, "Giá phải lớn hơn 0")
+        (val) => Number(val),
+        z.number({ message: "Giá phải là số hợp lệ" }).min(1, "Giá phải lớn hơn 0")
     ),
     stock: z.preprocess(
         (val) => {
-            if (val === '' || val === null || val === undefined) return undefined;
-            return Number(String(val).replace(/,/g, ''));
+            if (val === '' || val === null || val === undefined) return 0;
+            const num = Number(String(val).replace(/,/g, ''));
+            return isNaN(num) ? 0 : num;
         },
-        z.number({ 
-            invalid_type_error: "Số lượng phải là số" // ✅ Use invalid_type_error instead
-        }).min(0, "Số lượng không được âm")
+        z.number({ message: "Số lượng phải là số hợp lệ" }).min(0, "Số lượng không được âm")
     ),
     discountPercent: z.preprocess(
         (val) => val === '' || val === undefined ? 0 : Number(String(val).replace(/,/g, '')),
