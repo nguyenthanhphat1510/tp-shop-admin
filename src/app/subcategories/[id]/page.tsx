@@ -69,7 +69,7 @@ export default function SubCategoryDetailPage() {
                 setSubcategory(data);
             } catch (error) {
                 console.error('❌ Error fetching subcategory:', error);
-                toast.error(error.message, {
+                toast.error(error instanceof Error ? error.message : 'Đã xảy ra lỗi', {
                     icon: '❌',
                 });
                 router.push('/subcategories');
@@ -150,7 +150,7 @@ export default function SubCategoryDetailPage() {
             );
         } catch (error) {
             console.error('❌ Error toggling status:', error);
-            toast.error(error.message, {
+            toast.error(error instanceof Error ? error.message : 'Đã xảy ra lỗi', {
                 duration: 5000,
                 icon: '❌',
             });
@@ -197,7 +197,7 @@ export default function SubCategoryDetailPage() {
             }, 1000);
         } catch (error) {
             console.error('❌ Error deleting subcategory:', error);
-            toast.error(error.message, {
+            toast.error(error instanceof Error ? error.message : 'Đã xảy ra lỗi', {
                 duration: 5000,
                 icon: '❌',
             });
