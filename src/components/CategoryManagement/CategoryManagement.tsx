@@ -5,13 +5,22 @@ import { Eye } from "lucide-react"; // Thêm icon
 import { useRouter } from "next/navigation";
 import toast from 'react-hot-toast';
 
+interface Category {
+    _id: string;
+    name: string;
+    description: string;
+    active: boolean;
+    createdAt: string;
+    updatedAt: string;
+}
+
 export default function CategoryManagement() {
     const router = useRouter();
     const [search, setSearch] = useState("");
     const [viewMode, setViewMode] = useState("table");
-    const [categoryList, setCategoryList] = useState([]);
+    const [categoryList, setCategoryList] = useState<Category[]>([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+    const [error, setError] = useState<string | null>(null);
 
     // Filter states
     const [showFilters, setShowFilters] = useState(false);
@@ -74,9 +83,9 @@ export default function CategoryManagement() {
             case "name":
                 return a.name.localeCompare(b.name);
             case "createdAt":
-                return new Date(b.createdAt) - new Date(a.createdAt);
+                return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
             case "updatedAt":
-                return new Date(b.updatedAt) - new Date(a.updatedAt);
+                return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
             default:
                 return 0;
         }
