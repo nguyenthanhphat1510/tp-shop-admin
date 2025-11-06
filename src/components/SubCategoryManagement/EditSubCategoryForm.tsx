@@ -41,16 +41,23 @@ interface Category {
     isActive: boolean;
 }
 
-// ✅ ERROR STATE TYPE
 interface ValidationErrors {
     name?: string;
     categoryId?: string;
 }
 
-export default function EditSubCategoryForm() {
+// ✅ FIX: THÊM INTERFACE CHO PROPS (OPTIONAL VÌ DÙNG useParams TRONG COMPONENT)
+interface EditSubCategoryFormProps {
+    subCategoryId?: string | string[]; // Optional vì component tự lấy từ useParams
+}
+
+// ✅ FIX: THÊM PROPS TYPE (nhưng không dùng vì đã có useParams)
+export default function EditSubCategoryForm(_props?: EditSubCategoryFormProps) {
     const router = useRouter();
     const params = useParams();
-    const id = params.id as string;
+    
+    // ✅ LẤY ID TỪ useParams (KHÔNG TỪ PROPS)
+    const id = Array.isArray(params.id) ? params.id[0] : params.id as string;
     
     const [formData, setFormData] = useState<SubcategoryFormData>({
         name: "",
@@ -99,8 +106,8 @@ export default function EditSubCategoryForm() {
                 const categoriesData = await categoriesResponse.json();
                 
                 // Filter only active categories
-                const activeCategories = categoriesData.filter(cat => 
-                    cat.isActive === true || cat.isActive === "true"
+                const activeCategories = categoriesData.filter((cat: Category) => 
+                    cat.isActive === true 
                 );
                 
                 setCategories(activeCategories);
@@ -112,7 +119,8 @@ export default function EditSubCategoryForm() {
                 
             } catch (error) {
                 console.error('❌ Error fetching data:', error);
-                toast.error(`Lỗi: ${error.message}`);
+                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                toast.error(`Lỗi: ${errorMessage}`);
                 router.push('/subcategories');
             } finally {
                 setFetching(false);
@@ -277,7 +285,8 @@ export default function EditSubCategoryForm() {
             console.error('❌ Error updating subcategory:', error);
             
             // ✅ HIỂN THỊ MESSAGE TỪ BACKEND (ĐÃ FORMAT)
-            toast.error(error.message, {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            toast.error(errorMessage, {
                 duration: 5000,
                 icon: '❌',
             });
