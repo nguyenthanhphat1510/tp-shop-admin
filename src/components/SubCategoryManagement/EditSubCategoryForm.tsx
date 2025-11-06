@@ -1,8 +1,29 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { ArrowLeft, Save, Folder } from "lucide-react";
+import { ArrowLeft, Save, Folder, AlertCircle } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
 import toast from 'react-hot-toast';
+import { z } from 'zod';
+
+// ✅ ZOD SCHEMA CHO SUBCATEGORY
+const SubcategorySchema = z.object({
+    name: z
+        .string()
+        .min(1, "Tên danh mục con không được để trống")
+        .trim()
+        .min(2, "Tên danh mục con phải có ít nhất 2 ký tự")
+        .max(100, "Tên danh mục con không được vượt quá 100 ký tự")
+        .refine(
+            (name) => name.trim().length > 0,
+            "Tên danh mục con không được chỉ chứa khoảng trắng"
+        ),
+    categoryId: z
+        .string()
+        .min(1, "Vui lòng chọn danh mục cha")
+        .regex(/^[0-9a-fA-F]{24}$/, "ID danh mục cha không hợp lệ")
+});
+
+type SubcategoryFormData = z.infer<typeof SubcategorySchema>;
 
 interface SubCategory {
     _id: string;
@@ -20,19 +41,25 @@ interface Category {
     isActive: boolean;
 }
 
+// ✅ ERROR STATE TYPE
+interface ValidationErrors {
+    name?: string;
+    categoryId?: string;
+}
+
 export default function EditSubCategoryForm() {
     const router = useRouter();
     const params = useParams();
     const id = params.id as string;
     
-    const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState<SubcategoryFormData>({
         name: "",
         categoryId: ""
     });
     
     const [loading, setLoading] = useState(false);
     const [fetching, setFetching] = useState(true);
-    const [error, setError] = useState("");
+    const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
     const [originalSubCategory, setOriginalSubCategory] = useState<SubCategory | null>(null);
     const [categories, setCategories] = useState<Category[]>([]);
     
@@ -97,51 +124,113 @@ export default function EditSubCategoryForm() {
         }
     }, [id, router]);
     
-    const handleInputChange = (e) => {
+    // ✅ VALIDATE FORM WITH ZOD (REAL-TIME)
+    const validateField = (name: keyof SubcategoryFormData, value: string) => {
+        try {
+            // Validate single field
+            SubcategorySchema.shape[name].parse(value);
+            
+            // Clear error if valid
+            setValidationErrors(prev => {
+                const newErrors = { ...prev };
+                delete newErrors[name];
+                return newErrors;
+            });
+        } catch (error) {
+            if (error instanceof z.ZodError) {
+                setValidationErrors(prev => ({
+                    ...prev,
+                    [name]: error.errors[0].message
+                }));
+            }
+        }
+    };
+    
+    // ✅ VALIDATE ENTIRE FORM
+    const validateForm = (): boolean => {
+        try {
+            SubcategorySchema.parse(formData);
+            setValidationErrors({});
+            return true;
+        } catch (error) {
+            if (error instanceof z.ZodError) {
+                const errors: ValidationErrors = {};
+                error.errors.forEach(err => {
+                    if (err.path[0]) {
+                        errors[err.path[0] as keyof ValidationErrors] = err.message;
+                    }
+                });
+                setValidationErrors(errors);
+                
+                // Show first error in toast
+                toast.error(error.errors[0].message, {
+                    icon: '⚠️',
+                });
+            }
+            return false;
+        }
+    };
+    
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
+        
         setFormData(prev => ({
             ...prev,
             [name]: value
         }));
+        
+        // ✅ VALIDATE ON CHANGE (DEBOUNCED)
+        if (value) {
+            validateField(name as keyof SubcategoryFormData, value);
+        }
     };
     
-    const handleSubmit = async (e) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        
+        // ✅ VALIDATE FORM TRƯỚC KHI SUBMIT
+        if (!validateForm()) {
+            console.log('❌ Form validation failed:', validationErrors);
+            return;
+        }
+        
         setLoading(true);
-        setError("");
         
         try {
-            // ✅ Validation
-            if (!formData.name.trim()) {
-                throw new Error("Tên danh mục con không được để trống");
-            }
+            // ✅ Kiểm tra có thay đổi không
+            const nameChanged = formData.name.trim() !== originalSubCategory?.name;
+            const categoryChanged = formData.categoryId !== originalSubCategory?.categoryId;
             
-            if (formData.name.trim().length < 2) {
-                throw new Error("Tên danh mục con phải có ít nhất 2 ký tự");
-            }
-            
-            if (!formData.categoryId) {
-                throw new Error("Vui lòng chọn danh mục cha");
-            }
-            
-            // Kiểm tra xem có thay đổi gì không
-            if (formData.name.trim() === originalSubCategory?.name && 
-                formData.categoryId === originalSubCategory?.categoryId) {
-                toast.info('Không có thay đổi nào để cập nhật');
+            if (!nameChanged && !categoryChanged) {
+                toast.info('Không có thay đổi nào để cập nhật', {
+                    icon: 'ℹ️',
+                });
                 return;
             }
             
-            console.log('📝 Updating subcategory with data:', formData);
-            
-            // ✅ Prepare data for API
-            const submitData = {
+            console.log('📝 Updating subcategory with data:', {
                 name: formData.name.trim(),
-                categoryId: formData.categoryId
-            };
+                categoryId: formData.categoryId,
+                changes: {
+                    nameChanged,
+                    categoryChanged
+                }
+            });
+            
+            // ✅ CHỈ GỬI FIELD THỰC SỰ THAY ĐỔI
+            const submitData: Partial<SubcategoryFormData> = {};
+            
+            if (nameChanged) {
+                submitData.name = formData.name.trim();
+            }
+            
+            if (categoryChanged) {
+                submitData.categoryId = formData.categoryId;
+            }
             
             console.log('📦 Submitting data:', submitData);
             
-            // ✅ Call PUT API (dựa trên subcategory controller)
+            // ✅ Call PUT API
             const response = await fetch(`http://localhost:3000/api/subcategories/${id}`, {
                 method: 'PUT',
                 headers: {
@@ -152,29 +241,32 @@ export default function EditSubCategoryForm() {
             
             console.log(`📡 Response status: ${response.status}`);
             
+            // ✅ XỬ LÝ ERROR RESPONSE
             if (!response.ok) {
-                const contentType = response.headers.get('content-type');
-                let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-                
-                if (contentType && contentType.includes('application/json')) {
-                    try {
-                        const errorData = await response.json();
-                        errorMessage = errorData.message || errorMessage;
-                    } catch (e) {
-                        console.error('Error parsing error response:', e);
-                    }
-                } else {
-                    console.error('Server returned non-JSON response');
-                }
-                
-                throw new Error(errorMessage);
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Lỗi cập nhật danh mục con');
             }
             
             const result = await response.json();
             console.log('✅ Update successful:', result);
             
-            // ✅ Show success message và redirect
-            toast.success('Cập nhật danh mục con thành công!');
+            // ✅ SUCCESS MESSAGE CHI TIẾT
+            let successMessage = 'Cập nhật danh mục con thành công!';
+            
+            if (nameChanged && categoryChanged) {
+                const newCategory = categories.find(cat => cat._id === result.categoryId);
+                successMessage = `Đã đổi tên thành "${result.name}" và chuyển sang danh mục "${newCategory?.name}"`;
+            } else if (nameChanged) {
+                successMessage = `Đã đổi tên thành "${result.name}"`;
+            } else if (categoryChanged) {
+                const newCategory = categories.find(cat => cat._id === result.categoryId);
+                successMessage = `Đã chuyển sang danh mục "${newCategory?.name}"`;
+            }
+            
+            toast.success(successMessage, {
+                duration: 3000,
+                icon: '✅',
+            });
             
             // Delay để user thấy toast message
             setTimeout(() => {
@@ -183,8 +275,12 @@ export default function EditSubCategoryForm() {
             
         } catch (error) {
             console.error('❌ Error updating subcategory:', error);
-            setError(error.message);
-            toast.error(`Lỗi: ${error.message}`);
+            
+            // ✅ HIỂN THỊ MESSAGE TỪ BACKEND (ĐÃ FORMAT)
+            toast.error(error.message, {
+                duration: 5000,
+                icon: '❌',
+            });
         } finally {
             setLoading(false);
         }
@@ -217,6 +313,13 @@ export default function EditSubCategoryForm() {
     const hasChanges = formData.name.trim() !== originalSubCategory.name || 
                       formData.categoryId !== originalSubCategory.categoryId;
     
+    // ✅ CHECK IF FORM IS VALID
+    const isFormValid = !validationErrors.name && 
+                       !validationErrors.categoryId && 
+                       formData.name.trim() && 
+                       formData.categoryId &&
+                       hasChanges;
+    
     return (
         <div className="max-w-4xl mx-auto p-8">
             {/* Header */}
@@ -233,12 +336,6 @@ export default function EditSubCategoryForm() {
 
             {/* Form */}
             <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-                {error && (
-                    <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-md">
-                        <p className="text-red-700 text-sm">{error}</p>
-                    </div>
-                )}
-
                 <form onSubmit={handleSubmit} className="space-y-6">
                     {/* Icon Preview */}
                     <div className="text-center mb-6">
@@ -252,6 +349,7 @@ export default function EditSubCategoryForm() {
                     <div>
                         <h3 className="text-lg font-medium text-black mb-4">Thông tin danh mục con</h3>
                         <div className="space-y-4">
+                            {/* ✅ NAME INPUT WITH VALIDATION */}
                             <div>
                                 <label className="block text-sm font-medium text-black mb-1">
                                     Tên danh mục con *
@@ -261,15 +359,25 @@ export default function EditSubCategoryForm() {
                                     name="name"
                                     value={formData.name}
                                     onChange={handleInputChange}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black"
+                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 text-black transition-colors ${
+                                        validationErrors.name 
+                                            ? 'border-red-300 focus:ring-red-500 focus:border-red-500' 
+                                            : 'border-gray-300 focus:ring-purple-500 focus:border-transparent'
+                                    }`}
                                     placeholder="Nhập tên danh mục con (VD: iPhone, Samsung, Nike...)"
-                                    required
                                 />
+                                {validationErrors.name && (
+                                    <div className="flex items-center gap-1 mt-1 text-red-600 text-sm">
+                                        <AlertCircle className="w-4 h-4" />
+                                        <span>{validationErrors.name}</span>
+                                    </div>
+                                )}
                                 <p className="mt-1 text-sm text-gray-500">
-                                    Tên danh mục con sẽ hiển thị cho khách hàng
+                                    Tên danh mục con sẽ hiển thị cho khách hàng (2-100 ký tự)
                                 </p>
                             </div>
                             
+                            {/* ✅ CATEGORY SELECT WITH VALIDATION */}
                             <div>
                                 <label className="block text-sm font-medium text-black mb-1">
                                     Danh mục cha *
@@ -278,8 +386,11 @@ export default function EditSubCategoryForm() {
                                     name="categoryId"
                                     value={formData.categoryId}
                                     onChange={handleInputChange}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black"
-                                    required
+                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 text-black transition-colors ${
+                                        validationErrors.categoryId 
+                                            ? 'border-red-300 focus:ring-red-500 focus:border-red-500' 
+                                            : 'border-gray-300 focus:ring-purple-500 focus:border-transparent'
+                                    }`}
                                 >
                                     <option value="">Chọn danh mục cha</option>
                                     {categories.map(category => (
@@ -288,6 +399,12 @@ export default function EditSubCategoryForm() {
                                         </option>
                                     ))}
                                 </select>
+                                {validationErrors.categoryId && (
+                                    <div className="flex items-center gap-1 mt-1 text-red-600 text-sm">
+                                        <AlertCircle className="w-4 h-4" />
+                                        <span>{validationErrors.categoryId}</span>
+                                    </div>
+                                )}
                                 <p className="mt-1 text-sm text-gray-500">
                                     Chọn danh mục cha mà danh mục con này thuộc về
                                 </p>
@@ -340,7 +457,7 @@ export default function EditSubCategoryForm() {
                                         <Folder className="w-6 h-6 text-purple-600" />
                                     </div>
                                     <div>
-                                        <h4 className="font-medium text-black">{formData.name}</h4>
+                                        <h4 className="font-medium text-black">{formData.name.trim()}</h4>
                                         <p className="text-sm text-gray-600">
                                             Danh mục: {selectedCategory?.name || 'Không xác định'}
                                         </p>
@@ -373,8 +490,9 @@ export default function EditSubCategoryForm() {
                         
                         <button
                             type="submit"
-                            disabled={loading || !formData.name.trim() || !formData.categoryId || !hasChanges}
+                            disabled={loading || !isFormValid}
                             className="px-6 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
+                            title={!isFormValid ? 'Vui lòng kiểm tra lại thông tin' : ''}
                         >
                             <Save className="w-4 h-4" />
                             {loading ? "Đang cập nhật..." : "Cập nhật danh mục con"}
