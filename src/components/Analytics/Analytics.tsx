@@ -133,7 +133,7 @@ export default function Analytics() {
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="month" />
               <YAxis />
-              <Tooltip formatter={(value) => [`${(value / 1000000).toFixed(1)}M`, "Doanh thu (₫)"]} />
+              <Tooltip formatter={(value: number) => [`${(value / 1000000).toFixed(1)}M`, "Doanh thu (₫)"]} />
               <Area type="monotone" dataKey="revenue" stroke="#3B82F6" fill="#3B82F6" fillOpacity={0.1} />
             </AreaChart>
           </ResponsiveContainer>
