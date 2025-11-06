@@ -1,5 +1,7 @@
 "use client";
 import React, { useState, useEffect, useMemo } from "react";
+// FIX 3: Import next/image
+import Image from "next/image";
 import { Edit, Trash2, Plus, Search, Filter, X, ChevronDown } from "lucide-react";
 import { useRouter } from "next/navigation";
 import toast from 'react-hot-toast';
@@ -24,6 +26,40 @@ type ProductVariantItem = {
     updatedAt: string;
 };
 
+// FIX 1a: Định nghĩa kiểu cho Category và Subcategory
+interface Category {
+  _id: string;
+  name: string;
+}
+interface Subcategory {
+  _id: string;
+  name: string;
+  categoryId: string;
+}
+
+// FIX 1a: Định nghĩa kiểu cho dữ liệu GỐC từ API (trước khi "flatten")
+interface ApiVariant {
+  _id: string;
+  price: string; // API trả về string, bạn đang dùng parseInt
+  images: string[];
+  stock: string; // API trả về string, bạn đang dùng parseInt
+  storage: string;
+  color: string;
+  isActive: boolean;
+}
+
+interface ApiProduct {
+  _id: string;
+  name: string;
+  description: string;
+  categoryId: string;
+  subcategoryId: string;
+  createdAt: string;
+  updatedAt: string;
+  variants: ApiVariant[];
+}
+
+
 export default function ProductsPage() {
     const router = useRouter();
     const [search, setSearch] = useState("");
@@ -32,12 +68,14 @@ export default function ProductsPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const [categories, setCategories] = useState<any[]>([]);
-    const [subcategories, setSubcategories] = useState<any[]>([]);
+    // FIX 1b: Sử dụng kiểu đã định nghĩa
+    const [categories, setCategories] = useState<Category[]>([]);
+    const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
 
     const PAGE_SIZES = [5, 10, 20, 50];
     const [page, setPage] = useState(1);
-    const [pageSize, setPageSize] = useState(PAGE_SIZES[0]);
+    // FIX 2: Xóa 'setPageSize' vì không được sử dụng (no-unused-vars)
+    const [pageSize] = useState(PAGE_SIZES[0]);
 
     // ✅ FILTERS STATE
     const [showFilters, setShowFilters] = useState(false);
@@ -62,7 +100,8 @@ export default function ProductsPage() {
 
                 if (categoriesRes.ok) setCategories(categoriesData);
                 if (subcategoriesRes.ok) setSubcategories(subcategoriesData);
-            } catch (error) {
+            // FIX 1c: Sử dụng 'unknown' cho catch block
+            } catch (error: unknown) {
                 console.error('❌ Error fetching categories/subcategories:', error);
                 toast.error("Không thể tải danh mục.");
             }
@@ -86,7 +125,8 @@ export default function ProductsPage() {
                     throw new Error(result.message || 'Failed to fetch products');
                 }
 
-                const flattenedVariants = result.data.flatMap((product: any) => {
+                // FIX 1b: Sử dụng kiểu ApiProduct
+                const flattenedVariants = result.data.flatMap((product: ApiProduct) => {
                     const category = categories.find((cat) => cat._id === product.categoryId);
                     const subcategory = subcategories.find((sub) => sub._id === product.subcategoryId);
 
@@ -94,7 +134,8 @@ export default function ProductsPage() {
                         return [];
                     }
 
-                    return product.variants.map((variant: any) => ({
+                    // FIX 1b: Sử dụng kiểu ApiVariant
+                    return product.variants.map((variant: ApiVariant) => ({
                         _id: variant._id,
                         productId: product._id,
                         name: product.name,
@@ -116,8 +157,10 @@ export default function ProductsPage() {
 
                 setProductList(flattenedVariants);
                 setError(null);
-            } catch (err: any) {
+            // FIX 1c: Sử dụng 'unknown' cho catch block
+            } catch (err: unknown) {
                 console.error('❌ Error fetching products:', err);
+                // Giữ nguyên logic của bạn, chỉ sửa 'any' thành 'unknown'
                 setError('Không thể tải danh sách sản phẩm. Vui lòng thử lại.');
             } finally {
                 setLoading(false);
@@ -233,8 +276,13 @@ export default function ProductsPage() {
                         style: { background: '#F59E0B', color: '#fff', fontWeight: 'bold' }
                     });
                 }
-            } catch (error: any) {
-                toast.error(`❌ Lỗi: ${error.message}`);
+            // FIX 1c: Sử dụng 'unknown' và kiểm tra 'instanceof Error'
+            } catch (error: unknown) {
+                let message = 'Lỗi không xác định';
+                if (error instanceof Error) {
+                    message = error.message;
+                }
+                toast.error(`❌ Lỗi: ${message}`);
             }
         }
     };
@@ -277,10 +325,16 @@ export default function ProductsPage() {
                         style: { background: '#DC2626', color: '#fff', fontWeight: 'bold' }
                     }
                 );
-            } catch (error: any) {
+            // FIX 1c: Sử dụng 'unknown' và kiểm tra 'instanceof Error'
+            } catch (error: unknown) {
                 console.error('❌ Error deleting variant:', error);
                 
-                if (error.message.includes('cuối cùng')) {
+                let message = 'Lỗi không xác định';
+                if (error instanceof Error) {
+                    message = error.message;
+                }
+                
+                if (message.includes('cuối cùng')) {
                     toast.error(
                         `❌ Không thể xóa variant cuối cùng!\n\n` +
                         `Sản phẩm phải có ít nhất 1 variant.\n` +
@@ -288,46 +342,13 @@ export default function ProductsPage() {
                         { duration: 6000 }
                     );
                 } else {
-                    toast.error(`❌ Lỗi: ${error.message}`);
+                    toast.error(`❌ Lỗi: ${message}`);
                 }
             }
         }
     };
 
-    // ✅ XÓA CẢ PRODUCT (OPTIONAL - GIỮ LẠI NẾU CẦN)
-    const handleDeleteProduct = async (productId: string, productName: string) => {
-        if (confirm(
-            `🗑️ XÓA VĨNH VIỄN sản phẩm "${productName}"?\n\n` +
-            `⚠️ CẢNH BÁO:\n` +
-            `- Sản phẩm và TẤT CẢ phiên bản sẽ bị xóa\n` +
-            `- Tất cả ảnh sẽ bị xóa khỏi Cloudinary\n` +
-            `- KHÔNG THỂ KHÔI PHỤC\n\n` +
-            `Bạn có chắc chắn?`
-        )) {
-            try {
-                const response = await fetch(`http://localhost:3000/api/products/${productId}`, {
-                    method: 'DELETE'
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.message || 'Lỗi xóa sản phẩm');
-                }
-
-                const result = await response.json();
-
-                // ✅ XÓA TẤT CẢ VARIANTS CỦA PRODUCT
-                setProductList((prev) => prev.filter((variant) => variant.productId !== productId));
-
-                toast.success(`🗑️ ${result.message}`, {
-                    duration: 5000,
-                    style: { background: '#DC2626', color: '#fff', fontWeight: 'bold' }
-                });
-            } catch (error: any) {
-                toast.error(`❌ Lỗi: ${error.message}`);
-            }
-        }
-    };
+    // FIX 2: Xóa hàm 'handleDeleteProduct' vì không được sử dụng (no-unused-vars)
 
     // ✅ FIX: Thay đổi từ edit product sang edit variant
     const handleEdit = (variantId: string) => {
@@ -335,13 +356,28 @@ export default function ProductsPage() {
     };
 
     // Reusable Components
-    const ToggleSwitch = ({ isActive, onToggle, disabled = false }: any) => (
+    
+    // FIX 1d: Thêm kiểu cho Props
+    type ToggleSwitchProps = {
+      isActive: boolean;
+      onToggle: () => void;
+      disabled?: boolean;
+    }
+    const ToggleSwitch = ({ isActive, onToggle, disabled = false }: ToggleSwitchProps) => (
         <button onClick={onToggle} disabled={disabled} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${isActive ? 'bg-green-500' : 'bg-gray-300'} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
             <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ease-in-out ${isActive ? 'translate-x-6' : 'translate-x-1'}`} />
         </button>
     );
 
-    const ActionButton = ({ onClick, variant = "primary", size = "sm", children, disabled = false }: any) => {
+    // FIX 1d: Thêm kiểu cho Props
+    type ActionButtonProps = {
+      onClick: () => void;
+      variant?: "primary" | "secondary" | "danger";
+      size?: "sm" | "md";
+      children: React.ReactNode;
+      disabled?: boolean;
+    }
+    const ActionButton = ({ onClick, variant = "primary", size = "sm", children, disabled = false }: ActionButtonProps) => {
         const baseClasses = "inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed";
         const variants: Record<string, string> = {
             primary: "bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500 shadow-sm hover:shadow-md",
@@ -355,7 +391,14 @@ export default function ProductsPage() {
     const ProductCard = ({ variant }: { variant: ProductVariantItem }) => (
         <div className={`bg-white rounded-lg shadow-sm border-2 border-gray-300 hover:shadow-md hover:border-gray-400 transition-all duration-200 overflow-hidden ${!variant.active ? 'opacity-75' : ''}`}>
             <div className="p-4">
-                <img src={variant.images?.[0] || "https://via.placeholder.com/300x200"} alt={variant.name} className="w-full h-48 rounded-lg object-cover border-2 border-gray-200 mb-4" />
+                {/* FIX 3a: Thay <img> bằng <Image> */}
+                <Image 
+                    src={variant.images?.[0] || "https://via.placeholder.com/300x200"} 
+                    alt={variant.name} 
+                    width={300}
+                    height={200}
+                    className="w-full h-48 rounded-lg object-cover border-2 border-gray-200 mb-4" 
+                />
                 <h3 className="font-bold text-gray-900 text-lg">{variant.name}</h3>
                 <p className="text-gray-600 font-medium mb-2">{variant.storage} - {variant.color}</p>
                 <div className="flex flex-wrap gap-2 text-sm mb-3">
@@ -488,7 +531,8 @@ export default function ProductsPage() {
                                         className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
                                     >
                                         <option value="">Tất cả</option>
-                                        {categories.map(cat => (
+                                        {/* FIX 1b: Thêm kiểu cho 'cat' */}
+                                        {categories.map((cat: Category) => (
                                             <option key={cat._id} value={cat._id}>{cat.name}</option>
                                         ))}
                                     </select>
@@ -506,7 +550,8 @@ export default function ProductsPage() {
                                         className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         <option value="">Tất cả</option>
-                                        {filteredSubcategories.map(sub => (
+                                        {/* FIX 1b: Thêm kiểu cho 'sub' */}
+                                        {filteredSubcategories.map((sub: Subcategory) => (
                                             <option key={sub._id} value={sub._id}>{sub.name}</option>
                                         ))}
                                     </select>
@@ -668,7 +713,14 @@ export default function ProductsPage() {
                                                     <tr key={variant._id} className={`hover:bg-gray-50 transition-colors ${!variant.active ? 'opacity-60' : ''}`}>
                                                         <td className="py-4 px-6">
                                                             <div className="flex items-center gap-3">
-                                                                <img src={variant.images?.[0] || "https://via.placeholder.com/80"} alt={variant.name} className="w-16 h-16 rounded-lg object-cover border border-gray-200" />
+                                                                {/* FIX 3b: Thay <img> bằng <Image> */}
+                                                                <Image 
+                                                                    src={variant.images?.[0] || "https://via.placeholder.com/80"} 
+                                                                    alt={variant.name} 
+                                                                    width={64}
+                                                                    height={64}
+                                                                    className="rounded-lg object-cover border border-gray-200" 
+                                                                />
                                                                 <div>
                                                                     <div className="font-medium text-gray-900">{variant.name}</div>
                                                                     <div className="text-sm text-gray-600">{variant.storage} - {variant.color}</div>
