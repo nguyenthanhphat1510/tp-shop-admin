@@ -4,12 +4,37 @@ import { useRouter, useParams } from "next/navigation";
 import { ArrowLeft, Edit, Trash2, FolderOpen, Calendar, Clock, CheckCircle, XCircle } from "lucide-react";
 import toast from 'react-hot-toast';
 
+// FIX 1a: Định nghĩa Interface (kiểu dữ liệu) cho Category
+interface Category {
+  _id: string;
+  name: string;
+  description: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// FIX 1a: Định nghĩa kiểu cho dữ liệu API (để fix lỗi 'any' ở fetchStats)
+interface ApiSubcategory {
+  _id: string; // Giả định
+  categoryId: string;
+  isActive: boolean | string;
+}
+
+interface ApiProduct {
+  _id: string; // Giả định
+  categoryId: string;
+  isActive: boolean | string;
+}
+
+
 export default function CategoryDetailPage() {
     const router = useRouter();
     const params = useParams();
     const categoryId = params.id as string;
 
-    const [category, setCategory] = useState<any>(null);
+    // FIX 1b: Sửa 'useState<any>(null)' thành kiểu dữ liệu cụ thể
+    const [category, setCategory] = useState<Category | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -33,7 +58,7 @@ export default function CategoryDetailPage() {
                 const categoryData = await categoryRes.json();
 
                 // Transform data
-                const transformedCategory = {
+                const transformedCategory: Category = {
                     _id: categoryData._id,
                     name: categoryData.name,
                     description: categoryData.description || "",
@@ -48,9 +73,14 @@ export default function CategoryDetailPage() {
                 await fetchStats(categoryId);
 
                 setError(null);
-            } catch (err: any) {
+            // FIX 1c: Sửa 'catch (err: any)' thành 'catch (err: unknown)'
+            } catch (err: unknown) {
                 console.error('❌ Error fetching category details:', err);
-                setError(err.message || 'Có lỗi xảy ra');
+                if (err instanceof Error) {
+                    setError(err.message || 'Có lỗi xảy ra');
+                } else {
+                    setError('Có lỗi xảy ra');
+                }
             } finally {
                 setLoading(false);
             }
@@ -68,15 +98,17 @@ export default function CategoryDetailPage() {
             const subRes = await fetch('http://localhost:3000/api/subcategories');
             const subData = await subRes.json();
 
-            const subCategoriesOfThisCategory = subData.filter((sub: any) => sub.categoryId === catId);
-            const activeSubCategories = subCategoriesOfThisCategory.filter((sub: any) => sub.isActive === true || sub.isActive === "true");
+            // FIX 1d: Sửa '(sub: any)' thành kiểu 'ApiSubcategory'
+            const subCategoriesOfThisCategory = subData.filter((sub: ApiSubcategory) => sub.categoryId === catId);
+            const activeSubCategories = subCategoriesOfThisCategory.filter((sub: ApiSubcategory) => sub.isActive === true || sub.isActive === "true");
 
             // Fetch all products
             const prodRes = await fetch('http://localhost:3000/api/products');
             const prodData = await prodRes.json();
 
-            const productsOfThisCategory = prodData.filter((prod: any) => prod.categoryId === catId);
-            const activeProducts = productsOfThisCategory.filter((prod: any) => prod.isActive === true || prod.isActive === "true");
+            // FIX 1d: Sửa '(prod: any)' thành kiểu 'ApiProduct'
+            const productsOfThisCategory = prodData.filter((prod: ApiProduct) => prod.categoryId === catId);
+            const activeProducts = productsOfThisCategory.filter((prod: ApiProduct) => prod.isActive === true || prod.isActive === "true");
 
             setStats({
                 totalSubCategories: subCategoriesOfThisCategory.length,
@@ -122,7 +154,13 @@ export default function CategoryDetailPage() {
 
                 const newStatus = result.isActive === "true" || result.isActive === true;
 
-                setCategory(prev => ({ ...prev, active: newStatus }));
+                // FIX 1e: Sửa lỗi 'prev' bị 'any'
+                setCategory((prev) => {
+                    // Thêm kiểm tra 'prev' có null hay không
+                    if (!prev) return null; 
+                    // Trả về state mới với kiểu 'Category'
+                    return { ...prev, active: newStatus };
+                });
 
                 if (newStatus) {
                     toast.success(`✅ Đã kích hoạt: ${category.name}`, {
@@ -135,9 +173,12 @@ export default function CategoryDetailPage() {
                         style: { background: '#F59E0B', color: '#fff', fontWeight: 'bold' }
                     });
                 }
-            } catch (error: any) {
+            // FIX 1c: Sửa 'catch (error: any)'
+            } catch (error: unknown) {
+                let message = 'Lỗi không xác định';
+                if (error instanceof Error) message = error.message;
                 console.error('❌ Error toggling status:', error);
-                toast.error(`❌ Lỗi: ${error.message}`, { duration: 3000 });
+                toast.error(`❌ Lỗi: ${message}`, { duration: 3000 });
             }
         }
     };
@@ -152,8 +193,8 @@ export default function CategoryDetailPage() {
             `- Danh mục sẽ bị xóa VĨNH VIỄN khỏi database\n` +
             `- KHÔNG THỂ KHÔI PHỤC\n` +
             `- Chỉ xóa được khi:\n` +
-            `  + KHÔNG CÒN danh mục con nào\n` +
-            `  + KHÔNG CÒN sản phẩm nào\n\n` +
+            `  + KHÔNG CÒN danh mục con nào\n` +
+            `  + KHÔNG CÒN sản phẩm nào\n\n` +
             `Bạn có chắc chắn?`
         )) {
             try {
@@ -182,9 +223,13 @@ export default function CategoryDetailPage() {
                 );
 
                 router.push('/categories');
-            } catch (error: any) {
+            // FIX 1c: Sửa 'catch (error: any)'
+            } catch (error: unknown) {
+                let message = 'Lỗi không xác định';
+                if (error instanceof Error) message = error.message;
+
                 console.error('❌ Error deleting category:', error);
-                toast.error(error.message, {
+                toast.error(message, {
                     duration: 6000,
                     icon: '🚫',
                 });
