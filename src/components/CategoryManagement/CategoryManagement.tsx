@@ -45,7 +45,7 @@ export default function CategoryManagement() {
                 const data = await response.json();
                 console.log('✅ Categories data received:', data);
 
-                const transformedData = data.map(category => ({
+                const transformedData = data.map((category: any) => ({
                     _id: category._id,
                     name: category.name,
                     description: category.description || "",
@@ -103,7 +103,7 @@ export default function CategoryManagement() {
     const hasActiveFilters = search || filters.status !== "" || filters.sortBy !== "name";
 
     // ✅ TOGGLE STATUS - CÓ CONFIRM
-    const toggleActive = async (categoryId, categoryName, currentStatus) => {
+    const toggleActive = async (categoryId: string, categoryName: string, currentStatus: boolean) => {
         const action = currentStatus ? 'TẠM DỪNG' : 'KÍCH HOẠT';
         const newStatusText = currentStatus ? 'Tạm dừng' : 'Hoạt động';
         const currentStatusText = currentStatus ? 'Hoạt động' : 'Tạm dừng';
@@ -158,24 +158,24 @@ export default function CategoryManagement() {
                 if (error.message.includes('danh mục con')) {
                     toast.error(error.message, {
                         duration: 6000,
-                        style: { 
-                            borderRadius: '10px', 
-                            background: '#EF4444', 
-                            color: '#fff', 
-                            fontWeight: 'bold', 
-                            maxWidth: '500px' 
+                        style: {
+                            borderRadius: '10px',
+                            background: '#EF4444',
+                            color: '#fff',
+                            fontWeight: 'bold',
+                            maxWidth: '500px'
                         },
                         icon: '🚫',
                     });
                 } else if (error.message.includes('sản phẩm')) {
                     toast.error(error.message, {
                         duration: 6000,
-                        style: { 
-                            borderRadius: '10px', 
-                            background: '#EF4444', 
-                            color: '#fff', 
-                            fontWeight: 'bold', 
-                            maxWidth: '500px' 
+                        style: {
+                            borderRadius: '10px',
+                            background: '#EF4444',
+                            color: '#fff',
+                            fontWeight: 'bold',
+                            maxWidth: '500px'
                         },
                         icon: '🚫',
                     });
@@ -187,7 +187,7 @@ export default function CategoryManagement() {
     };
 
     // ✅ HARD DELETE - CÓ CONFIRM
-    const handleDelete = async (categoryId, categoryName) => {
+    const handleDelete = async (categoryId: string, categoryName: string) => {
         if (confirm(
             `🗑️ XÓA VĨNH VIỄN danh mục "${categoryName}"?\n\n` +
             `⚠️ CẢNH BÁO:\n` +
@@ -231,11 +231,11 @@ export default function CategoryManagement() {
                 if (error.message.includes('danh mục con')) {
                     toast.error(error.message, {
                         duration: 6000,
-                        style: { 
-                            borderRadius: '10px', 
-                            background: '#EF4444', 
-                            color: '#fff', 
-                            fontWeight: 'bold', 
+                        style: {
+                            borderRadius: '10px',
+                            background: '#EF4444',
+                            color: '#fff',
+                            fontWeight: 'bold',
                             maxWidth: '500px',
                             padding: '16px'
                         },
@@ -244,11 +244,11 @@ export default function CategoryManagement() {
                 } else if (error.message.includes('sản phẩm')) {
                     toast.error(error.message, {
                         duration: 6000,
-                        style: { 
-                            borderRadius: '10px', 
-                            background: '#EF4444', 
-                            color: '#fff', 
-                            fontWeight: 'bold', 
+                        style: {
+                            borderRadius: '10px',
+                            background: '#EF4444',
+                            color: '#fff',
+                            fontWeight: 'bold',
                             maxWidth: '500px',
                             padding: '16px'
                         },
@@ -348,7 +348,7 @@ export default function CategoryManagement() {
                 </div>
 
                 <div className="flex gap-2">
-                    
+
                     <ActionButton
                         variant="warning"
                         size="sm"
@@ -403,7 +403,7 @@ export default function CategoryManagement() {
         );
     }
 
-    const handleEdit = (categoryId) => {
+    const handleEdit = (categoryId: string) => {
         router.push(`/categories/${categoryId}/edit`);
     };
 
@@ -445,11 +445,10 @@ export default function CategoryManagement() {
                         <div className="flex gap-2">
                             <button
                                 onClick={() => setShowFilters(!showFilters)}
-                                className={`flex items-center gap-2 px-4 py-3 border-2 rounded-lg transition-colors ${
-                                    showFilters || hasActiveFilters
+                                className={`flex items-center gap-2 px-4 py-3 border-2 rounded-lg transition-colors ${showFilters || hasActiveFilters
                                         ? "border-black bg-black text-white"
                                         : "border-black text-black hover:bg-gray-100"
-                                }`}
+                                    }`}
                             >
                                 <Filter className="w-4 h-4" />
                                 <span className="hidden sm:inline">Lọc</span>
@@ -473,21 +472,19 @@ export default function CategoryManagement() {
                             <div className="hidden md:flex bg-gray-100 rounded-lg p-1 border-2 border-gray-300">
                                 <button
                                     onClick={() => setViewMode("table")}
-                                    className={`px-3 py-2 text-sm rounded-md transition-colors ${
-                                        viewMode === "table"
+                                    className={`px-3 py-2 text-sm rounded-md transition-colors ${viewMode === "table"
                                             ? "bg-white text-gray-900 shadow-sm border border-gray-300"
                                             : "text-gray-600 hover:text-gray-900"
-                                    }`}
+                                        }`}
                                 >
                                     Bảng
                                 </button>
                                 <button
                                     onClick={() => setViewMode("card")}
-                                    className={`px-3 py-2 text-sm rounded-md transition-colors ${
-                                        viewMode === "card"
+                                    className={`px-3 py-2 text-sm rounded-md transition-colors ${viewMode === "card"
                                             ? "bg-white text-gray-900 shadow-sm border border-gray-300"
                                             : "text-gray-600 hover:text-gray-900"
-                                    }`}
+                                        }`}
                                 >
                                     Thẻ
                                 </button>
@@ -606,14 +603,14 @@ export default function CategoryManagement() {
                                                         </td>
                                                         <td className="py-4 px-6">
                                                             <div className="flex gap-2">
-                                                                 <ActionButton
-            variant="secondary"
-            size="sm"
-            onClick={() => router.push(`/categories/${category._id}`)}
-        >
-            <Eye className="w-4 h-4" />
-            Xem
-        </ActionButton>
+                                                                <ActionButton
+                                                                    variant="secondary"
+                                                                    size="sm"
+                                                                    onClick={() => router.push(`/categories/${category._id}`)}
+                                                                >
+                                                                    <Eye className="w-4 h-4" />
+                                                                    Xem
+                                                                </ActionButton>
                                                                 <ActionButton
                                                                     variant="warning"
                                                                     size="sm"
@@ -647,7 +644,7 @@ export default function CategoryManagement() {
                     <div className="mt-6 text-center text-sm text-gray-500">
                         Hiển thị {filtered.length} / {categoryList.length} danh mục
                         {search && ` cho "${search}"`}
-                        {hasActiveFilters && " (đã lọc)"}
+                        {hasActiveFilters && " (đã  )"}
                     </div>
                 )}
             </div>
