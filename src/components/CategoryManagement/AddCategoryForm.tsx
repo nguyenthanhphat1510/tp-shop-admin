@@ -14,7 +14,7 @@ export default function AddCategoryForm() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     
-    const handleInputChange = (e) => {
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
         setFormData(prev => ({
             ...prev,
@@ -22,7 +22,7 @@ export default function AddCategoryForm() {
         }));
     };
     
-    const handleSubmit = async (e) => {
+    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         setLoading(true);
         setError("");
@@ -88,8 +88,9 @@ export default function AddCategoryForm() {
             
         } catch (error) {
             console.error('❌ Error creating category:', error);
-            setError(error.message);
-            toast.error(`Lỗi: ${error.message}`);
+            const errorMessage = error instanceof Error ? error.message : 'Đã xảy ra lỗi không xác định';
+            setError(errorMessage);
+            toast.error(`Lỗi: ${errorMessage}`);
         } finally {
             setLoading(false);
         }
@@ -189,7 +190,7 @@ export default function AddCategoryForm() {
                             className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
                         >
                             <Save className="w-4 h-4" />
-                            {loading ? "Đang tạo..." : "Tạo danh mục"}
+                            {loading ? "Đang tạo..." : "Tạo danh "}
                         </button>
                     </div>
                 </form>
