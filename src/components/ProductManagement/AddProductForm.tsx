@@ -7,26 +7,53 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
 
-// ✅ CẬP NHẬT SCHEMA: Thêm discountPercent (optional)
+// ✅ FIX 1: Type definitions for Category, Subcategory, and Image
+interface Category {
+    _id: string;
+    name: string;
+}
+
+interface Subcategory {
+    _id: string;
+    name: string;
+    categoryId: string;
+}
+
+interface ImagePreview {
+    file: File;
+    preview: string;
+    id: number;
+}
+
+// ✅ FIX 2: Fix Zod schema - use .refine() instead of required_error for numbers
 const variantSchema = z.object({
     storage: z.string().min(1, "Dung lượng là bắt buộc"),
     color: z.string().min(1, "Màu sắc là bắt buộc"),
     price: z.preprocess(
-        (val) => Number(String(val).replace(/,/g, '')),
-        z.number({ required_error: "Giá là bắt buộc" }).min(1, "Giá phải lớn hơn 0")
+        (val) => {
+            if (val === '' || val === null || val === undefined) return undefined;
+            return Number(String(val).replace(/,/g, ''));
+        },
+        z.number({ 
+            invalid_type_error: "Giá phải là số" // ✅ Use invalid_type_error instead
+        }).min(1, "Giá phải lớn hơn 0")
     ),
     stock: z.preprocess(
-        (val) => Number(String(val).replace(/,/g, '')),
-        z.number({ required_error: "Số lượng là bắt buộc" }).min(0, "Số lượng không âm")
+        (val) => {
+            if (val === '' || val === null || val === undefined) return undefined;
+            return Number(String(val).replace(/,/g, ''));
+        },
+        z.number({ 
+            invalid_type_error: "Số lượng phải là số" // ✅ Use invalid_type_error instead
+        }).min(0, "Số lượng không được âm")
     ),
-    // ✅ THÊM: Giảm giá (optional, 0-100)
     discountPercent: z.preprocess(
         (val) => val === '' || val === undefined ? 0 : Number(String(val).replace(/,/g, '')),
         z.number().min(0, "Giảm giá không được âm").max(100, "Giảm giá tối đa 100%").optional()
     ).default(0),
 });
 
-const MAX_VARIANTS = 6; // ✅ THÊM GIỚI HẠN
+const MAX_VARIANTS = 6;
 
 const productSchema = z.object({
     name: z.string()
@@ -37,17 +64,22 @@ const productSchema = z.object({
     description: z.string().max(1000, "Mô tả không được quá 1000 ký tự").optional(),
     variants: z.array(variantSchema)
         .min(1, "Sản phẩm phải có ít nhất một phiên bản")
-        .max(MAX_VARIANTS, `Tối đa ${MAX_VARIANTS} phiên bản mỗi lần tạo`), // ✅ THÊM MAX
+        .max(MAX_VARIANTS, `Tối đa ${MAX_VARIANTS} phiên bản mỗi lần tạo`),
 });
 
+type ProductFormData = z.infer<typeof productSchema>;
 
 export default function AddProductForm() {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
-    const [categories, setCategories] = useState([]);
-    const [subcategories, setSubcategories] = useState([]);
+    
+    // ✅ FIX 3: Type state arrays
+    const [categories, setCategories] = useState<Category[]>([]);
+    const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
     const [loadingCategories, setLoadingCategories] = useState(true);
-    const [variantImages, setVariantImages] = useState([[]]);
+    
+    // ✅ FIX 4: Type image state as ImagePreview[][]
+    const [variantImages, setVariantImages] = useState<ImagePreview[][]>([[]]);
 
     const {
         register,
@@ -56,7 +88,7 @@ export default function AddProductForm() {
         formState: { errors },
         watch,
         setValue,
-    } = useForm({
+    } = useForm<ProductFormData>({
         resolver: zodResolver(productSchema),
         defaultValues: {
             name: "",
@@ -66,9 +98,9 @@ export default function AddProductForm() {
             variants: [{
                 storage: '',
                 color: '',
-                price: '',
-                stock: '',
-                discountPercent: 0 // ✅ THÊM default
+                price: 0,
+                stock: 0,
+                discountPercent: 0
             }]
         }
     });
@@ -80,14 +112,18 @@ export default function AddProductForm() {
 
     const watchedCategoryId = watch("categoryId");
 
-    // --- LOGIC FETCH DATA VÀ XỬ LÝ ẢNH (Không thay đổi) ---
+    // Fetch categories
     useEffect(() => {
         const fetchCategories = async () => {
             setLoadingCategories(true);
             try {
                 const res = await fetch('http://localhost:3000/api/categories');
-                if (res.ok) setCategories(await res.json());
+                if (res.ok) {
+                    const data = await res.json();
+                    setCategories(data);
+                }
             } catch (e) {
+                console.error('Error fetching categories:', e);
                 toast.error("Không thể tải danh mục.");
             } finally {
                 setLoadingCategories(false);
@@ -96,15 +132,21 @@ export default function AddProductForm() {
         fetchCategories();
     }, []);
 
+    // Fetch subcategories when category changes
     useEffect(() => {
-        const fetchSubcategories = async (categoryId) => {
+        const fetchSubcategories = async (categoryId: string) => {
             try {
                 const res = await fetch(`http://localhost:3000/api/subcategories/category/${categoryId}`);
-                if (res.ok) setSubcategories(await res.json());
+                if (res.ok) {
+                    const data = await res.json();
+                    setSubcategories(data);
+                }
             } catch (e) {
+                console.error('Error fetching subcategories:', e);
                 setSubcategories([]);
             }
         };
+        
         if (watchedCategoryId) {
             fetchSubcategories(watchedCategoryId);
         } else {
@@ -113,24 +155,45 @@ export default function AddProductForm() {
         }
     }, [watchedCategoryId, setValue]);
 
-    const handleImageUpload = (e, variantIndex) => {
-        const files = Array.from(e.target.files);
-        if ((variantImages[variantIndex]?.length || 0) + files.length > 5) {
+    // ✅ FIX 5: Type event and variantIndex parameters
+    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, variantIndex: number) => {
+        const files = e.target.files;
+        if (!files) return;
+
+        const fileArray = Array.from(files);
+        const currentImages = variantImages[variantIndex] || [];
+        
+        if (currentImages.length + fileArray.length > 5) {
             toast.error("Mỗi phiên bản chỉ được có tối đa 5 hình ảnh.");
             return;
         }
-        const newImagesForVariant = [];
-        files.forEach(file => {
+
+        // ✅ FIX 6: Type newImagesForVariant as ImagePreview[]
+        const newImagesForVariant: ImagePreview[] = [];
+        
+        fileArray.forEach(file => {
             if (file.type.startsWith('image/')) {
                 const reader = new FileReader();
-                reader.onload = (event) => {
-                    newImagesForVariant.push({ file, preview: event.target.result, id: Date.now() + Math.random() });
-                    if (newImagesForVariant.length === files.length) {
-                        setVariantImages(prev => {
-                            const updatedImages = [...prev];
-                            updatedImages[variantIndex] = [...(updatedImages[variantIndex] || []), ...newImagesForVariant];
-                            return updatedImages;
+                reader.onload = (event: ProgressEvent<FileReader>) => {
+                    // ✅ FIX 7: Check if event.target is not null
+                    if (event.target && event.target.result) {
+                        newImagesForVariant.push({ 
+                            file, 
+                            preview: event.target.result as string, 
+                            id: Date.now() + Math.random() 
                         });
+                        
+                        if (newImagesForVariant.length === fileArray.length) {
+                            setVariantImages(prev => {
+                                // ✅ FIX 8: Properly type updatedImages
+                                const updatedImages: ImagePreview[][] = [...prev];
+                                updatedImages[variantIndex] = [
+                                    ...(updatedImages[variantIndex] || []), 
+                                    ...newImagesForVariant
+                                ];
+                                return updatedImages;
+                            });
+                        }
                     }
                 };
                 reader.readAsDataURL(file);
@@ -138,7 +201,8 @@ export default function AddProductForm() {
         });
     };
 
-    const removeImage = (variantIndex, imageId) => {
+    // ✅ FIX 9: Type parameters
+    const removeImage = (variantIndex: number, imageId: number) => {
         setVariantImages(prev => {
             const updatedImages = [...prev];
             updatedImages[variantIndex] = updatedImages[variantIndex].filter(img => img.id !== imageId);
@@ -146,7 +210,8 @@ export default function AddProductForm() {
         });
     };
 
-    const onSubmit = async (data) => {
+    // ✅ FIX 10: Type the data parameter
+    const onSubmit = async (data: ProductFormData) => {
         setLoading(true);
         const formData = new FormData();
         formData.append('name', data.name);
@@ -154,10 +219,9 @@ export default function AddProductForm() {
         formData.append('categoryId', data.categoryId);
         formData.append('subcategoryId', data.subcategoryId || '');
 
-        // ✅ CẬP NHẬT: Transform variants (thêm isOnSale)
         const variantsWithSale = data.variants.map(v => ({
             ...v,
-            isOnSale: v.discountPercent > 0 // ✅ Tự động set isOnSale
+            isOnSale: (v.discountPercent || 0) > 0
         }));
 
         formData.append('variants', JSON.stringify(variantsWithSale));
@@ -177,15 +241,16 @@ export default function AddProductForm() {
             if (!response.ok) throw new Error(result.message || 'Có lỗi xảy ra.');
             toast.success('Sản phẩm đã được tạo thành công! 🎉');
             setTimeout(() => router.push('/products'), 1000);
-        } catch (error) {
-            toast.error(`Lỗi: ${error.message}`);
+        } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            toast.error(`Lỗi: ${errorMessage}`);
         } finally {
             setLoading(false);
         }
     };
 
-    // Helper để quản lý class cho input (tránh lặp lại)
-    const getInputClasses = (hasError) =>
+    // ✅ FIX 11: Type hasError parameter
+    const getInputClasses = (hasError: boolean | undefined) =>
         `block w-full px-3 py-2 text-sm text-gray-900 bg-white border rounded-md focus:outline-none focus:ring-2 ` +
         (hasError
             ? 'border-red-500 focus:border-red-500 focus:ring-red-500/40'
@@ -208,13 +273,13 @@ export default function AddProductForm() {
                         {/* Tên sản phẩm */}
                         <div className="md:col-span-2">
                             <label className="block text-sm font-medium text-gray-700 mb-1">Tên sản phẩm *</label>
-                            <input {...register("name")} placeholder="VD: iPhone 15 Pro Max" className={getInputClasses(errors.name)} />
+                            <input {...register("name")} placeholder="VD: iPhone 15 Pro Max" className={getInputClasses(!!errors.name)} />
                             {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name.message}</p>}
                         </div>
                         {/* Danh mục */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Danh mục *</label>
-                            <select {...register("categoryId")} className={getInputClasses(errors.categoryId)} disabled={loadingCategories}>
+                            <select {...register("categoryId")} className={getInputClasses(!!errors.categoryId)} disabled={loadingCategories}>
                                 <option value="">{loadingCategories ? "Đang tải..." : "Chọn danh mục"}</option>
                                 {categories.map(cat => <option key={cat._id} value={cat._id}>{cat.name}</option>)}
                             </select>
@@ -223,7 +288,7 @@ export default function AddProductForm() {
                         {/* Danh mục con */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Danh mục con</label>
-                            <select {...register("subcategoryId")} className={getInputClasses(errors.subcategoryId)} disabled={!watchedCategoryId || subcategories.length === 0}>
+                            <select {...register("subcategoryId")} className={getInputClasses(!!errors.subcategoryId)} disabled={!watchedCategoryId || subcategories.length === 0}>
                                 <option value="">{!watchedCategoryId ? "Chọn danh mục trước" : "Chọn danh mục con"}</option>
                                 {subcategories.map(sub => <option key={sub._id} value={sub._id}>{sub.name}</option>)}
                             </select>
@@ -232,7 +297,7 @@ export default function AddProductForm() {
                         {/* Mô tả */}
                         <div className="md:col-span-2">
                             <label className="block text-sm font-medium text-gray-700 mb-1">Mô tả</label>
-                            <textarea {...register("description")} rows={4} placeholder="Nhập mô tả chi tiết..." className={getInputClasses(errors.description)} />
+                            <textarea {...register("description")} rows={4} placeholder="Nhập mô tả chi tiết..." className={getInputClasses(!!errors.description)} />
                             {errors.description && <p className="text-red-500 text-sm mt-1">{errors.description.message}</p>}
                         </div>
                     </div>
@@ -258,17 +323,16 @@ export default function AddProductForm() {
                                     </button>
                                 )}
 
-                                {/* ✅ CẬP NHẬT: Grid 3 cột cho 6 fields */}
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">Dung lượng *</label>
                                         <input
                                             {...register(`variants.${index}.storage`)}
                                             placeholder="VD: 128GB"
-                                            className={getInputClasses(errors.variants?.[index]?.storage)}
+                                            className={getInputClasses(!!errors.variants?.[index]?.storage)}
                                         />
                                         {errors.variants?.[index]?.storage && (
-                                            <p className="text-red-500 text-sm mt-1">{errors.variants[index].storage.message}</p>
+                                            <p className="text-red-500 text-sm mt-1">{errors.variants[index]?.storage?.message}</p>
                                         )}
                                     </div>
 
@@ -277,10 +341,10 @@ export default function AddProductForm() {
                                         <input
                                             {...register(`variants.${index}.color`)}
                                             placeholder="VD: Xanh Titan"
-                                            className={getInputClasses(errors.variants?.[index]?.color)}
+                                            className={getInputClasses(!!errors.variants?.[index]?.color)}
                                         />
                                         {errors.variants?.[index]?.color && (
-                                            <p className="text-red-500 text-sm mt-1">{errors.variants[index].color.message}</p>
+                                            <p className="text-red-500 text-sm mt-1">{errors.variants[index]?.color?.message}</p>
                                         )}
                                     </div>
 
@@ -290,10 +354,10 @@ export default function AddProductForm() {
                                             type="number"
                                             {...register(`variants.${index}.price`)}
                                             placeholder="VD: 25000000"
-                                            className={getInputClasses(errors.variants?.[index]?.price)}
+                                            className={getInputClasses(!!errors.variants?.[index]?.price)}
                                         />
                                         {errors.variants?.[index]?.price && (
-                                            <p className="text-red-500 text-sm mt-1">{errors.variants[index].price.message}</p>
+                                            <p className="text-red-500 text-sm mt-1">{errors.variants[index]?.price?.message}</p>
                                         )}
                                     </div>
 
@@ -303,14 +367,13 @@ export default function AddProductForm() {
                                             type="number"
                                             {...register(`variants.${index}.stock`)}
                                             placeholder="VD: 50"
-                                            className={getInputClasses(errors.variants?.[index]?.stock)}
+                                            className={getInputClasses(!!errors.variants?.[index]?.stock)}
                                         />
                                         {errors.variants?.[index]?.stock && (
-                                            <p className="text-red-500 text-sm mt-1">{errors.variants[index].stock.message}</p>
+                                            <p className="text-red-500 text-sm mt-1">{errors.variants[index]?.stock?.message}</p>
                                         )}
                                     </div>
 
-                                    {/* ✅ THÊM: Trường giảm giá */}
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">
                                             Giảm giá (%)
@@ -322,22 +385,21 @@ export default function AddProductForm() {
                                             placeholder="VD: 20"
                                             min="0"
                                             max="100"
-                                            className={getInputClasses(errors.variants?.[index]?.discountPercent)}
+                                            className={getInputClasses(!!errors.variants?.[index]?.discountPercent)}
                                         />
                                         {errors.variants?.[index]?.discountPercent && (
-                                            <p className="text-red-500 text-sm mt-1">{errors.variants[index].discountPercent.message}</p>
+                                            <p className="text-red-500 text-sm mt-1">{errors.variants[index]?.discountPercent?.message}</p>
                                         )}
                                         <p className="text-xs text-gray-500 mt-1">Để trống = 0% (không giảm giá)</p>
                                     </div>
 
-                                    {/* ✅ THÊM: Hiển thị giá sau giảm (Preview) */}
                                     <div className="flex items-end">
                                         <div className="w-full">
                                             <label className="block text-sm font-medium text-gray-700 mb-1">Giá sau giảm</label>
                                             <div className="px-3 py-2 text-sm bg-gray-50 border border-gray-300 rounded-md text-gray-700">
                                                 {(() => {
-                                                    const price = watch(`variants.${index}.price`) || 0;
-                                                    const discount = watch(`variants.${index}.discountPercent`) || 0;
+                                                    const price = Number(watch(`variants.${index}.price`)) || 0;
+                                                    const discount = Number(watch(`variants.${index}.discountPercent`)) || 0;
                                                     const finalPrice = Math.round(price * (1 - discount / 100));
                                                     return finalPrice > 0 ? `${finalPrice.toLocaleString('vi-VN')} đ` : '---';
                                                 })()}
@@ -346,13 +408,26 @@ export default function AddProductForm() {
                                     </div>
                                 </div>
 
-                                {/* Image upload section - không đổi */}
+                                {/* Image upload section */}
                                 <div className="mt-4">
                                     <label className="block text-sm font-medium text-gray-700 mb-2">
                                         Hình ảnh cho phiên bản này (Tối đa 5)
                                     </label>
-                                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-blue-500" onClick={() => document.getElementById(`file-input-${index}`).click()}>
-                                        <input id={`file-input-${index}`} type="file" onChange={(e) => handleImageUpload(e, index)} accept="image/*" multiple className="hidden" />
+                                    <div 
+                                        className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-blue-500" 
+                                        onClick={() => {
+                                            const input = document.getElementById(`file-input-${index}`) as HTMLInputElement;
+                                            if (input) input.click();
+                                        }}
+                                    >
+                                        <input 
+                                            id={`file-input-${index}`} 
+                                            type="file" 
+                                            onChange={(e) => handleImageUpload(e, index)} 
+                                            accept="image/*" 
+                                            multiple 
+                                            className="hidden" 
+                                        />
                                         <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                                         <p className="text-gray-600">Nhấp để chọn ảnh</p>
                                     </div>
@@ -361,7 +436,13 @@ export default function AddProductForm() {
                                             {variantImages[index].map(image => (
                                                 <div key={image.id} className="relative">
                                                     <img src={image.preview} alt="Preview" className="w-full h-24 object-cover rounded border" />
-                                                    <button type="button" onClick={() => removeImage(index, image.id)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"><X className="w-3 h-3" /></button>
+                                                    <button 
+                                                        type="button" 
+                                                        onClick={() => removeImage(index, image.id)} 
+                                                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                                                    >
+                                                        <X className="w-3 h-3" />
+                                                    </button>
                                                 </div>
                                             ))}
                                         </div>
@@ -374,7 +455,6 @@ export default function AddProductForm() {
                             <p className="text-red-500 text-sm mt-2">{errors.variants.root.message}</p>
                         )}
 
-                        {/* ✅ CẬP NHẬT: Button thêm variant với giới hạn */}
                         <button
                             type="button"
                             onClick={() => {
@@ -385,8 +465,8 @@ export default function AddProductForm() {
                                 append({
                                     storage: '',
                                     color: '',
-                                    price: '',
-                                    stock: '',
+                                    price: 0,
+                                    stock: 0,
                                     discountPercent: 0
                                 });
                                 setVariantImages(prev => [...prev, []]);
