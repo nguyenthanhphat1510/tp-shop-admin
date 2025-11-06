@@ -7,7 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
 
-// ✅ FIX 1: Type definitions for Category, Subcategory, and Image
+// Type definitions for Category, Subcategory, and Image
 interface Category {
     _id: string;
     name: string;
@@ -25,26 +25,23 @@ interface ImagePreview {
     id: number;
 }
 
-// ✅ FIX 2: Fix Zod schema - use .refine() instead of required_error for numbers
+// ✅ FIX: Sửa Zod schema - dùng z.coerce.number() thay vì z.preprocess
 const variantSchema = z.object({
     storage: z.string().min(1, "Dung lượng là bắt buộc"),
     color: z.string().min(1, "Màu sắc là bắt buộc"),
-    price: z.preprocess(
-        (val) => Number(val),
-        z.number({ message: "Giá phải là số hợp lệ" }).min(1, "Giá phải lớn hơn 0")
-    ),
-    stock: z.preprocess(
-        (val) => {
-            if (val === '' || val === null || val === undefined) return 0;
-            const num = Number(String(val).replace(/,/g, ''));
-            return isNaN(num) ? 0 : num;
-        },
-        z.number({ message: "Số lượng phải là số hợp lệ" }).min(0, "Số lượng không được âm")
-    ),
-    discountPercent: z.preprocess(
-        (val) => val === '' || val === undefined ? 0 : Number(String(val).replace(/,/g, '')),
-        z.number().min(0, "Giảm giá không được âm").max(100, "Giảm giá tối đa 100%").optional()
-    ).default(0),
+    price: z.coerce // FIX
+        .number({ message: "Giá phải là số hợp lệ" })
+        .min(1, "Giá phải lớn hơn 0"),
+    stock: z.coerce // FIX
+        .number({ message: "Số lượng phải là số hợp lệ" })
+        .min(0, "Số lượng không được âm")
+        .default(0), // Thêm default để xử lý chuỗi rỗng hoặc undefined
+    discountPercent: z.coerce // FIX
+        .number({ message: "Giảm giá phải là số" })
+        .min(0, "Giảm giá không được âm")
+        .max(100, "Giảm giá tối đa 100%")
+        .optional()
+        .default(0),
 });
 
 const MAX_VARIANTS = 6;
@@ -67,12 +64,12 @@ export default function AddProductForm() {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
     
-    // ✅ FIX 3: Type state arrays
+    // Type state arrays
     const [categories, setCategories] = useState<Category[]>([]);
     const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
     const [loadingCategories, setLoadingCategories] = useState(true);
     
-    // ✅ FIX 4: Type image state as ImagePreview[][]
+    // Type image state as ImagePreview[][]
     const [variantImages, setVariantImages] = useState<ImagePreview[][]>([[]]);
 
     const {
@@ -83,7 +80,7 @@ export default function AddProductForm() {
         watch,
         setValue,
     } = useForm<ProductFormData>({
-        resolver: zodResolver(productSchema),
+        resolver: zodResolver(productSchema), // Dòng này giờ sẽ hoạt động
         defaultValues: {
             name: "",
             categoryId: "",
@@ -149,7 +146,7 @@ export default function AddProductForm() {
         }
     }, [watchedCategoryId, setValue]);
 
-    // ✅ FIX 5: Type event and variantIndex parameters
+    // Type event and variantIndex parameters
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, variantIndex: number) => {
         const files = e.target.files;
         if (!files) return;
@@ -162,14 +159,14 @@ export default function AddProductForm() {
             return;
         }
 
-        // ✅ FIX 6: Type newImagesForVariant as ImagePreview[]
+        // Type newImagesForVariant as ImagePreview[]
         const newImagesForVariant: ImagePreview[] = [];
         
         fileArray.forEach(file => {
             if (file.type.startsWith('image/')) {
                 const reader = new FileReader();
                 reader.onload = (event: ProgressEvent<FileReader>) => {
-                    // ✅ FIX 7: Check if event.target is not null
+                    // Check if event.target is not null
                     if (event.target && event.target.result) {
                         newImagesForVariant.push({ 
                             file, 
@@ -179,7 +176,7 @@ export default function AddProductForm() {
                         
                         if (newImagesForVariant.length === fileArray.length) {
                             setVariantImages(prev => {
-                                // ✅ FIX 8: Properly type updatedImages
+                                // Properly type updatedImages
                                 const updatedImages: ImagePreview[][] = [...prev];
                                 updatedImages[variantIndex] = [
                                     ...(updatedImages[variantIndex] || []), 
@@ -195,7 +192,7 @@ export default function AddProductForm() {
         });
     };
 
-    // ✅ FIX 9: Type parameters
+    // Type parameters
     const removeImage = (variantIndex: number, imageId: number) => {
         setVariantImages(prev => {
             const updatedImages = [...prev];
@@ -204,7 +201,7 @@ export default function AddProductForm() {
         });
     };
 
-    // ✅ FIX 10: Type the data parameter
+    // Type the data parameter
     const onSubmit = async (data: ProductFormData) => {
         setLoading(true);
         const formData = new FormData();
@@ -243,7 +240,7 @@ export default function AddProductForm() {
         }
     };
 
-    // ✅ FIX 11: Type hasError parameter
+    // Type hasError parameter
     const getInputClasses = (hasError: boolean | undefined) =>
         `block w-full px-3 py-2 text-sm text-gray-900 bg-white border rounded-md focus:outline-none focus:ring-2 ` +
         (hasError
