@@ -1,10 +1,10 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { Edit, Trash2, Plus, Search, Filter, X, FolderOpen } from "lucide-react";
-import { Eye } from "lucide-react"; // Thêm icon
+import { Edit, Trash2, Plus, Search, Filter, X, FolderOpen, Eye } from "lucide-react";
 import { useRouter } from "next/navigation";
 import toast from 'react-hot-toast';
 
+// ✅ INTERFACES
 interface Category {
     _id: string;
     name: string;
@@ -12,6 +12,25 @@ interface Category {
     active: boolean;
     createdAt: string;
     updatedAt: string;
+}
+
+// ✅ COMPONENT PROPS TYPES
+interface ToggleSwitchProps {
+    isActive: boolean;
+    onToggle: () => void;
+    disabled?: boolean;
+}
+
+interface ActionButtonProps {
+    onClick: () => void;
+    variant?: "primary" | "success" | "danger" | "secondary" | "outline" | "warning";
+    size?: "sm" | "md" | "lg";
+    children: React.ReactNode;
+    disabled?: boolean;
+}
+
+interface CategoryCardProps {
+    category: Category;
 }
 
 export default function CategoryManagement() {
@@ -45,7 +64,15 @@ export default function CategoryManagement() {
                 const data = await response.json();
                 console.log('✅ Categories data received:', data);
 
-                const transformedData = data.map((category: any) => ({
+                // ✅ FIX: Type the map callback parameter
+                const transformedData = data.map((category: {
+                    _id: string;
+                    name: string;
+                    description?: string;
+                    isActive: boolean | string;
+                    createdAt: string;
+                    updatedAt: string;
+                }) => ({
                     _id: category._id,
                     name: category.name,
                     description: category.description || "",
@@ -56,8 +83,9 @@ export default function CategoryManagement() {
 
                 setCategoryList(transformedData);
                 setError(null);
-            } catch (err) {
+            } catch (err: unknown) { // ✅ FIX: Type catch error
                 console.error('❌ Error fetching categories:', err);
+                const errorMessage = err instanceof Error ? err.message : 'Unknown error';
                 setError('Không thể tải danh sách danh mục');
             } finally {
                 setLoading(false);
@@ -151,12 +179,13 @@ export default function CategoryManagement() {
                     });
                 }
 
-            } catch (error) {
+            } catch (error: unknown) { // ✅ FIX: Type catch error
                 console.error('❌ Error updating category status:', error);
+                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
                 // ✅ HIỂN THỊ LỖI RÀNG BUỘC
-                if (error.message.includes('danh mục con')) {
-                    toast.error(error.message, {
+                if (errorMessage.includes('danh mục con')) {
+                    toast.error(errorMessage, {
                         duration: 6000,
                         style: {
                             borderRadius: '10px',
@@ -167,8 +196,8 @@ export default function CategoryManagement() {
                         },
                         icon: '🚫',
                     });
-                } else if (error.message.includes('sản phẩm')) {
-                    toast.error(error.message, {
+                } else if (errorMessage.includes('sản phẩm')) {
+                    toast.error(errorMessage, {
                         duration: 6000,
                         style: {
                             borderRadius: '10px',
@@ -180,7 +209,7 @@ export default function CategoryManagement() {
                         icon: '🚫',
                     });
                 } else {
-                    toast.error(`❌ Lỗi: ${error.message}`, { duration: 3000 });
+                    toast.error(`❌ Lỗi: ${errorMessage}`, { duration: 3000 });
                 }
             }
         }
@@ -224,12 +253,13 @@ export default function CategoryManagement() {
                     }
                 );
 
-            } catch (error) {
+            } catch (error: unknown) { // ✅ FIX: Type catch error
                 console.error('❌ Error deleting category:', error);
+                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
                 // ✅ HIỂN THỊ LỖI RÀNG BUỘC
-                if (error.message.includes('danh mục con')) {
-                    toast.error(error.message, {
+                if (errorMessage.includes('danh mục con')) {
+                    toast.error(errorMessage, {
                         duration: 6000,
                         style: {
                             borderRadius: '10px',
@@ -241,8 +271,8 @@ export default function CategoryManagement() {
                         },
                         icon: '🚫',
                     });
-                } else if (error.message.includes('sản phẩm')) {
-                    toast.error(error.message, {
+                } else if (errorMessage.includes('sản phẩm')) {
+                    toast.error(errorMessage, {
                         duration: 6000,
                         style: {
                             borderRadius: '10px',
@@ -255,7 +285,7 @@ export default function CategoryManagement() {
                         icon: '🚫',
                     });
                 } else {
-                    toast.error(`❌ Lỗi: ${error.message}`, {
+                    toast.error(`❌ Lỗi: ${errorMessage}`, {
                         duration: 4000,
                         style: { borderRadius: '10px', background: '#EF4444', color: '#fff', fontWeight: 'bold' }
                     });
@@ -264,7 +294,8 @@ export default function CategoryManagement() {
         }
     };
 
-    const ToggleSwitch = ({ isActive, onToggle, disabled = false }) => (
+    // ✅ FIX: Type component props
+    const ToggleSwitch: React.FC<ToggleSwitchProps> = ({ isActive, onToggle, disabled = false }) => (
         <button
             onClick={onToggle}
             disabled={disabled}
@@ -283,19 +314,22 @@ export default function CategoryManagement() {
         </button>
     );
 
-    const ActionButton = ({ onClick, variant = "primary", size = "sm", children, disabled = false }) => {
+    // ✅ FIX: Type component props + index signature for variants/sizes
+    const ActionButton: React.FC<ActionButtonProps> = ({ onClick, variant = "primary", size = "sm", children, disabled = false }) => {
         const baseClasses = "inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed";
 
-        const variants = {
+        // ✅ FIX: Add index signature [key: string]
+        const variants: Record<string, string> = {
             primary: "bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500 shadow-sm hover:shadow-md",
             success: "bg-green-600 hover:bg-green-700 text-white focus:ring-green-500 shadow-sm hover:shadow-md",
             danger: "bg-red-600 hover:bg-red-700 text-white focus:ring-red-500 shadow-sm hover:shadow-md",
             secondary: "bg-gray-100 hover:bg-gray-200 text-gray-700 focus:ring-gray-500 border border-gray-300",
             outline: "border-2 border-gray-300 hover:border-gray-400 text-gray-700 hover:bg-gray-50 focus:ring-gray-500",
-            warning: "bg-orange-400 hover:bg-orange-500 text-white focus:ring-orange-400 shadow-sm hover:shadow-md" // ✅ Màu vàng cam dịu nhẹ
+            warning: "bg-orange-400 hover:bg-orange-500 text-white focus:ring-orange-400 shadow-sm hover:shadow-md"
         };
 
-        const sizes = {
+        // ✅ FIX: Add index signature [key: string]
+        const sizes: Record<string, string> = {
             sm: "px-3 py-2 text-sm",
             md: "px-4 py-2.5 text-sm",
             lg: "px-6 py-3 text-base"
@@ -312,7 +346,8 @@ export default function CategoryManagement() {
         );
     };
 
-    const CategoryCard = ({ category }) => (
+    // ✅ FIX: Type component props
+    const CategoryCard: React.FC<CategoryCardProps> = ({ category }) => (
         <div className={`bg-white rounded-lg shadow-sm border-2 border-gray-300 hover:shadow-md hover:border-gray-400 transition-all duration-200 overflow-hidden ${!category.active ? 'opacity-75' : ''}`}>
             <div className="p-6">
                 <div className="mb-4 flex justify-center">
@@ -348,7 +383,6 @@ export default function CategoryManagement() {
                 </div>
 
                 <div className="flex gap-2">
-
                     <ActionButton
                         variant="warning"
                         size="sm"
@@ -644,7 +678,7 @@ export default function CategoryManagement() {
                     <div className="mt-6 text-center text-sm text-gray-500">
                         Hiển thị {filtered.length} / {categoryList.length} danh mục
                         {search && ` cho "${search}"`}
-                        {hasActiveFilters && " (đã  )"}
+                        {hasActiveFilters && " (đã áp dụng bộ lọc)"}
                     </div>
                 )}
             </div>
