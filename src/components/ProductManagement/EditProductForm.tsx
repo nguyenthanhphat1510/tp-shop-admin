@@ -52,7 +52,8 @@ export default function EditVariantForm() {
         price: "",
         stock: "",
         discountPercent: "",
-        isActive: true
+        isActive: true,
+        isOnSale: false  // ✅ THÊM STATE MỚI cho toggle giảm giá
     });
     
     const [existingImages, setExistingImages] = useState<Array<{ id: string; url: string; publicId: string }>>([]);
@@ -66,58 +67,38 @@ export default function EditVariantForm() {
         const fetchVariant = async () => {
             try {
                 setFetching(true);
-                console.log('🚀 === START FETCH VARIANT ===');
-                console.log('📋 variantId:', variantId);
-                console.log('🌐 API URL:', `http://localhost:3000/api/products/variants/${variantId}`);
+                console.log('🚀 Fetching variant:', variantId);
 
                 const response = await fetch(`http://localhost:3000/api/products/variants/${variantId}`);
-
-                console.log('📡 Response received');
-                console.log('   - Status:', response.status);
-                console.log('   - Status Text:', response.statusText);
-                console.log('   - OK:', response.ok);
                 
                 if (!response.ok) {
                     const errorText = await response.text();
-                    console.error('❌ Response not OK');
-                    console.error('   - Error body:', errorText);
                     throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
                 }
                 
                 const result = await response.json();
-                console.log('✅ Response parsed successfully');
-                console.log('📦 Full result:', JSON.stringify(result, null, 2));
-                
                 const variantData = result.data.variant;
                 const productData = result.data.product;
                 
-                console.log('🔍 Extracted variantData:', variantData);
-                console.log('🔍 Extracted productData:', productData);
-                
-                if (!variantData) {
-                    throw new Error('Variant data không tồn tại trong response');
-                }
-                
-                if (!productData) {
-                    throw new Error('Product data không tồn tại trong response');
+                if (!variantData || !productData) {
+                    throw new Error('Dữ liệu không hợp lệ');
                 }
                 
                 setVariant(variantData);
                 setProduct(productData);
                 
-                console.log('✅ State updated with variant and product');
-                
-                // ✅ Fill form data
+                // Fill form
                 setFormData({
                     storage: variantData.storage || "",
                     color: variantData.color || "",
                     price: variantData.price?.toString() || "",
                     stock: variantData.stock?.toString() || "",
                     discountPercent: variantData.discountPercent?.toString() || "0",
-                    isActive: variantData.isActive === true
+                    isActive: variantData.isActive === true,
+                    isOnSale: variantData.isOnSale === true  // ✅ THÊM vào fetch
                 });
                 
-                // ✅ Set existing images
+                // Set existing images
                 if (variantData.imageUrls && Array.isArray(variantData.imageUrls)) {
                     setExistingImages(variantData.imageUrls.map((url: string, index: number) => ({
                         id: `existing_${index}`,
@@ -126,34 +107,24 @@ export default function EditVariantForm() {
                     })));
                 }
                 
-                console.log('✅ === FETCH VARIANT COMPLETE ===');
+                console.log('✅ Variant loaded successfully');
                 
             } catch (error) {
-                console.error('💥 === FETCH VARIANT ERROR ===');
-                console.error('❌ Error:', error);
-                
-                setError('Không thể tải thông tin variant: ' + error.message);
+                console.error('❌ Error fetching variant:', error);
+                setError(`Không thể tải thông tin variant: ${error instanceof Error ? error.message : 'Unknown error'}`);
                 toast.error('Không thể tải thông tin variant');
                 
                 setTimeout(() => {
                     router.push('/products');
                 }, 3000);
             } finally {
-                console.log('🏁 Setting fetching to false');
                 setFetching(false);
             }
         };
         
-        console.log('🎬 useEffect triggered');
-        console.log('   - variantId:', variantId);
-        console.log('   - variantId type:', typeof variantId);
-        console.log('   - variantId exists:', !!variantId);
-        
         if (variantId) {
-            console.log('✅ variantId is valid, calling fetchVariant()');
             fetchVariant();
         } else {
-            console.log('⚠️ variantId is empty/undefined');
             setFetching(false);
         }
     }, [variantId, router]);
@@ -171,7 +142,6 @@ export default function EditVariantForm() {
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files ? Array.from(e.target.files) : [];
         
-        // ✅ Limit số lượng ảnh (tối đa 5 ảnh/variant)
         const maxImages = 5;
         const currentTotal = existingImages.length + newImages.length;
         const availableSlots = maxImages - currentTotal;
@@ -184,13 +154,12 @@ export default function EditVariantForm() {
         const filesToProcess = files.slice(0, availableSlots);
         
         filesToProcess.forEach(file => {
-            // ✅ Validate file type và size
             if (!file.type.startsWith('image/')) {
                 toast.error(`${file.name} không phải là file ảnh`);
                 return;
             }
             
-            if (file.size > 5 * 1024 * 1024) { // 5MB
+            if (file.size > 5 * 1024 * 1024) {
                 toast.error(`${file.name} quá lớn (tối đa 5MB)`);
                 return;
             }
@@ -208,7 +177,6 @@ export default function EditVariantForm() {
             reader.readAsDataURL(file);
         });
         
-        // Reset input
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
         }
@@ -222,13 +190,25 @@ export default function EditVariantForm() {
         setNewImages(prev => prev.filter(img => img.id !== id));
     };
     
+    // ✅ THÊM HANDLER CHO TOGGLE GIẢM GIÁ
+    const handleDiscountToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const isChecked = e.target.checked;
+        
+        setFormData(prev => ({
+            ...prev,
+            isOnSale: isChecked,
+            // ✅ Nếu tắt giảm giá → reset discountPercent về 0
+            discountPercent: isChecked ? prev.discountPercent : "0"
+        }));
+    };
+    
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         setError("");
         
         try {
-            // ✅ Validation
+            // Validation
             if (!formData.storage.trim()) {
                 throw new Error("Dung lượng không được để trống");
             }
@@ -250,43 +230,31 @@ export default function EditVariantForm() {
                 throw new Error("Giảm giá phải từ 0-100%");
             }
             
-            // ✅ Kiểm tra có ít nhất 1 ảnh
-            if (existingImages.length === 0 && newImages.length === 0) {
-                throw new Error("Variant phải có ít nhất 1 ảnh");
+            // ✅ VALIDATE: Nếu bật giảm giá nhưng % = 0
+            if (formData.isOnSale && discountPercent === 0) {
+                throw new Error("Vui lòng nhập % giảm giá hoặc tắt khuyến mãi");
             }
             
             console.log(`📝 Updating variant ${variantId}`);
             
-            // ✅ Prepare FormData
+            // ✅ CHUẨN BỊ FORMDATA
             const submitData = new FormData();
             
-            // Product info (không thay đổi, chỉ để API biết context)
-            if (product) {
-                submitData.append('name', product.name);
-                submitData.append('description', product.description);
-                submitData.append('categoryId', product.categoryId);
-                if (product.subcategoryId) {
-                    submitData.append('subcategoryId', product.subcategoryId);
-                }
+            submitData.append('storage', formData.storage.trim());
+            submitData.append('color', formData.color.trim());
+            submitData.append('price', formData.price);
+            submitData.append('stock', formData.stock);
+            // ✅ Chỉ gửi discountPercent nếu isOnSale = true
+            submitData.append('discountPercent', formData.isOnSale ? discountPercent.toString() : "0");
+            submitData.append('isActive', formData.isActive.toString());
+            
+            // ✅ APPEND ẢNH MỚI (nếu có)
+            if (newImages.length > 0) {
+                console.log(`📸 Uploading ${newImages.length} new images`);
+                newImages.forEach((image) => {
+                    submitData.append('images', image.file); // Backend expect field name 'images'
+                });
             }
-            
-            // ✅ Variant data (BẮT BUỘC CÓ _id)
-            const variantData = [{
-                _id: variantId,
-                storage: formData.storage.trim(),
-                color: formData.color.trim(),
-                price: parseFloat(formData.price),
-                stock: parseInt(formData.stock),
-                discountPercent: discountPercent,
-                isActive: formData.isActive
-            }];
-            
-            submitData.append('variants', JSON.stringify(variantData));
-            
-            // ✅ Append new images (variant_0_images vì chỉ update 1 variant)
-            newImages.forEach((image) => {
-                submitData.append('variant_0_images', image.file);
-            });
             
             console.log('📦 Submitting data:', {
                 variantId,
@@ -300,8 +268,8 @@ export default function EditVariantForm() {
                 existingImagesCount: existingImages.length
             });
             
-            // ✅ Call PUT API (update product với 1 variant)
-            const response = await fetch(`http://localhost:3000/api/products/${product?._id}`, {
+            // ✅ GỌI API UPDATE VARIANT (KHÔNG PHẢI UPDATE PRODUCT!)
+            const response = await fetch(`http://localhost:3000/api/products/variants/${variantId}`, {
                 method: 'PUT',
                 body: submitData
             });
@@ -316,8 +284,8 @@ export default function EditVariantForm() {
                     try {
                         const errorData = await response.json();
                         errorMessage = errorData.message || errorMessage;
-                    } catch (e) {
-                        console.error('Error parsing error response:', e);
+                    } catch (parseError) {
+                        console.error('Error parsing error response:', parseError);
                     }
                 }
                 
@@ -327,16 +295,30 @@ export default function EditVariantForm() {
             const result = await response.json();
             console.log('✅ Update successful:', result);
             
-            toast.success('Cập nhật variant thành công!');
+            // ✅ HIỂN THỊ THÔNG BÁO SUCCESS (bao gồm giá sau giảm)
+            const updatedVariant = result.data;
+            
+            if (updatedVariant.discountPercent > 0) {
+                toast.success(
+                    `✅ Cập nhật thành công!\n` +
+                    `💰 Giá gốc: ${updatedVariant.price.toLocaleString('vi-VN')} VNĐ\n` +
+                    `🎁 Giảm ${updatedVariant.discountPercent}%\n` +
+                    `💵 Giá sau giảm: ${updatedVariant.finalPrice.toLocaleString('vi-VN')} VNĐ`,
+                    { duration: 5000 }
+                );
+            } else {
+                toast.success('✅ Cập nhật variant thành công!');
+            }
             
             setTimeout(() => {
                 router.push('/products');
-            }, 1000);
+            }, 1500);
             
         } catch (error) {
             console.error('❌ Error updating variant:', error);
-            setError(error.message);
-            toast.error(`Lỗi: ${error.message}`);
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            setError(errorMessage);
+            toast.error(`❌ Lỗi: ${errorMessage}`);
         } finally {
             setLoading(false);
         }
@@ -418,7 +400,7 @@ export default function EditVariantForm() {
                                 <p className="font-medium text-black">{variant.sold}</p>
                             </div>
                             <div>
-                                <p className="text-gray-500">Trạng thái</p>
+                                <p className="text-gray-500">Trạng thái hiện tại</p>
                                 <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
                                     variant.isActive 
                                         ? 'bg-green-100 text-green-800' 
@@ -428,6 +410,25 @@ export default function EditVariantForm() {
                                 </span>
                             </div>
                         </div>
+                        
+                        {/* ✅ HIỂN THỊ GIẢM GIÁ HIỆN TẠI (nếu có) */}
+                        {variant.discountPercent > 0 && (
+                            <div className="mt-3 pt-3 border-t border-gray-300">
+                                <p className="text-xs text-gray-500 mb-1">Khuyến mãi hiện tại:</p>
+                                <div className="flex items-center gap-4 text-sm">
+                                    <div>
+                                        <span className="text-gray-600">Giảm giá: </span>
+                                        <span className="font-bold text-red-600">{variant.discountPercent}%</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-gray-600">Giá sau giảm: </span>
+                                        <span className="font-bold text-green-600">
+                                            {variant.finalPrice.toLocaleString('vi-VN')} VNĐ
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Thông tin variant */}
@@ -497,62 +498,115 @@ export default function EditVariantForm() {
                                 />
                             </div>
                             
-                            <div>
-                                <label className="block text-sm font-medium text-black mb-1">
-                                    Giảm giá (%) 🎁
-                                </label>
-                                <input
-                                    type="number"
-                                    name="discountPercent"
-                                    value={formData.discountPercent}
-                                    onChange={handleInputChange}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black"
-                                    placeholder="0"
-                                    min="0"
-                                    max="100"
-                                    step="1"
-                                />
-                                <p className="text-xs text-gray-500 mt-1">Từ 0% đến 100%</p>
+                            {/* ✅ TOGGLE BẬT/TẮT GIẢM GIÁ */}
+                            <div className="col-span-2 border-t border-gray-200 pt-4 mt-2">
+                                <div className="flex items-center justify-between p-4 bg-purple-50 rounded-lg border-2 border-purple-200">
+                                    <div>
+                                        <h4 className="font-medium text-purple-900 flex items-center gap-2">
+                                            🎁 Khuyến mãi giảm giá
+                                        </h4>
+                                        <p className="text-sm text-purple-700 mt-1">
+                                            {formData.isOnSale 
+                                                ? "Đang áp dụng giảm giá cho variant này" 
+                                                : "Tắt giảm giá - sản phẩm bán giá gốc"}
+                                        </p>
+                                    </div>
+                                    
+                                    {/* Toggle Switch */}
+                                    <label className="relative inline-flex items-center cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={formData.isOnSale}
+                                            onChange={handleDiscountToggle}
+                                            className="sr-only peer"
+                                        />
+                                        <div className="w-14 h-7 bg-gray-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-purple-600"></div>
+                                        <span className="ms-3 text-sm font-medium text-gray-900">
+                                            {formData.isOnSale ? "Bật" : "Tắt"}
+                                        </span>
+                                    </label>
+                                </div>
                             </div>
                             
-                            <div className="flex items-center pt-6">
-                                <input
-                                    type="checkbox"
-                                    name="isActive"
-                                    checked={formData.isActive}
-                                    onChange={handleInputChange}
-                                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                                />
-                                <label className="ml-2 block text-sm text-black">
-                                    Kích hoạt variant
-                                </label>
+                            {/* ✅ INPUT % GIẢM GIÁ (chỉ hiện khi isOnSale = true) */}
+                            {formData.isOnSale && (
+                                <div className="col-span-2">
+                                    <label className="block text-sm font-medium text-black mb-1">
+                                        Phần trăm giảm giá (%) 🎁 *
+                                    </label>
+                                    <input
+                                        type="number"
+                                        name="discountPercent"
+                                        value={formData.discountPercent}
+                                        onChange={handleInputChange}
+                                        className="w-full px-3 py-2 border-2 border-purple-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black"
+                                        placeholder="Nhập % giảm giá (1-100)"
+                                        min="1"
+                                        max="100"
+                                        step="1"
+                                        required
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        Nhập từ 1% đến 100%. Ví dụ: 20 = giảm 20%
+                                    </p>
+                                </div>
+                            )}
+                            
+                            {/* ✅ CHECKBOX TRẠNG THÁI HOẠT ĐỘNG */}
+                            <div className="col-span-2 border-t border-gray-200 pt-4 mt-2">
+                                <div className="flex items-center p-4 bg-blue-50 rounded-lg border-2 border-blue-200">
+                                    <input
+                                        type="checkbox"
+                                        name="isActive"
+                                        checked={formData.isActive}
+                                        onChange={handleInputChange}
+                                        className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                    />
+                                    <div className="ml-3">
+                                        <label className="font-medium text-blue-900">
+                                            Kích hoạt variant
+                                        </label>
+                                        <p className="text-sm text-blue-700">
+                                            {formData.isActive 
+                                                ? "✅ Variant đang được hiển thị trên website" 
+                                                : "❌ Variant bị ẩn - khách hàng không thấy"}
+                                        </p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    {/* Preview giá */}
-                    {parseFloat(formData.discountPercent) > 0 && (
-                        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                            <h4 className="font-medium text-green-800 mb-2">💰 Xem trước giá</h4>
-                            <div className="grid grid-cols-3 gap-4 text-sm">
-                                <div>
-                                    <p className="text-green-700">Giá gốc</p>
-                                    <p className="font-bold text-green-900">
-                                        {parseFloat(formData.price || "0").toLocaleString('vi-VN')} VNĐ
+                    {/* ✅ PREVIEW GIÁ (chỉ hiện khi có giảm giá) */}
+                    {formData.isOnSale && parseFloat(formData.discountPercent) > 0 && (
+                        <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 rounded-lg p-4 shadow-sm">
+                            <h4 className="font-bold text-green-800 mb-3 flex items-center gap-2">
+                                💰 XEM TRƯỚC GIÁ BÁN
+                            </h4>
+                            <div className="grid grid-cols-3 gap-4">
+                                <div className="bg-white rounded-lg p-3 border border-green-200">
+                                    <p className="text-xs text-gray-500 mb-1">Giá gốc</p>
+                                    <p className="font-bold text-gray-800 text-lg">
+                                        {parseFloat(formData.price || "0").toLocaleString('vi-VN')} ₫
                                     </p>
                                 </div>
-                                <div>
-                                    <p className="text-green-700">Giảm {formData.discountPercent}%</p>
-                                    <p className="font-bold text-red-600">
-                                        -{calculateSavedAmount().toLocaleString('vi-VN')} VNĐ
+                                <div className="bg-white rounded-lg p-3 border border-red-200">
+                                    <p className="text-xs text-gray-500 mb-1">Giảm {formData.discountPercent}%</p>
+                                    <p className="font-bold text-red-600 text-lg">
+                                        -{calculateSavedAmount().toLocaleString('vi-VN')} ₫
                                     </p>
                                 </div>
-                                <div>
-                                    <p className="text-green-700">Giá sau giảm</p>
-                                    <p className="font-bold text-green-900 text-lg">
-                                        {calculateFinalPrice().toLocaleString('vi-VN')} VNĐ
+                                <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg p-3 text-white shadow-md">
+                                    <p className="text-xs opacity-90 mb-1">Giá sau giảm</p>
+                                    <p className="font-bold text-xl">
+                                        {calculateFinalPrice().toLocaleString('vi-VN')} ₫
                                     </p>
                                 </div>
+                            </div>
+                            <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                <p className="text-sm text-yellow-800">
+                                    💡 <strong>Lưu ý:</strong> Khách hàng sẽ thấy giá gốc bị <span className="line-through">gạch</span> và giá sau giảm được highlight.
+                                </p>
                             </div>
                         </div>
                     )}
